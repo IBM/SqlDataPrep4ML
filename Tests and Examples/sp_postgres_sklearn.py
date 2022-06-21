@@ -4,6 +4,10 @@
 # Setup is described in README.md
 #----------------------------------------------------------------
 
+#append system path to import cousin packages
+import sys
+sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SDPL - Public Version v2")
+
 from sql_preprocessing import *
 import pandas as pd
 from sklearn.preprocessing import *
@@ -11,7 +15,7 @@ from sklearn.preprocessing import *
 
 # Postgress connection
 # User: postgress, password: password
-dbconn = SqlConnection("postgres://postgres:password@localhost:5432/db1", print_sql=True)
+dbconn = SqlConnection("postgresql://weisun:password@localhost:5432/db1", print_sql=True)
 
 
 # Database functions

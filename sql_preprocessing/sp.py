@@ -26,7 +26,6 @@ import joblib
 
 
 
-
 class SqlConnection:
     """Connection to DBMS engine with functions for invocation of SQL statements.
     Encapsulates SQL Alchemy `Engine and Connection`_.
@@ -87,7 +86,7 @@ class SqlConnection:
         return "SqlConnection(engine=%s, print_sql=%s, dbtype=%s, conn=%s)" % (self.engine, self.print_sql, self.dbtype, self.conn)
 
 
-    def get_sdf(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by):
+    def get_sdf(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs):
         """Creates a new instance of :class:`SqlDataFrame`.
         For description of parameters see documentation of :class:`SqlDataFrame`.
 
@@ -97,10 +96,10 @@ class SqlConnection:
             A new instance of :class:`SqlDataFrame`.
         """
 
-        return SqlDataFrame(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by)
+        return SqlDataFrame(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs)
 
 
-    def get_sdf_for_table(self, sdf_name, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None):
+    def get_sdf_for_table(self, sdf_name, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None, **kwargs):
         """Creates a new instance of :class:`SqlDataFrame` for an existing table or a view.
         For description of parameters see documentation of :class:`SqlDataFrame`.
 
@@ -113,10 +112,10 @@ class SqlConnection:
         sdf_query_data_source = dataset_schema + "." + dataset_table
         catalog = catalog if catalog is not None else InMemoryTableCatalog(self, sdf_name, dataset_schema, dataset_table, fit_schema)
 
-        return self.get_sdf(catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by)
+        return self.get_sdf(catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs)
 
 
-    def get_sdf_for_query(self, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None):
+    def get_sdf_for_query(self, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None, **kwargs):
         """Creates a new instance of :class:`SqlDataFrame` for a SQL query.
         Can be used only in limited cases (such as for nesting of sdfs) because many functions require table as source and not sql.
         For description of parameters see documentation of :class:`SqlDataFrame`.
@@ -130,7 +129,7 @@ class SqlConnection:
         sql_query = "(" + sql_query + ")"
         catalog = catalog if catalog is not None else InMemoryTableCatalog(self, sdf_name, dataset_schema, dataset_table, fit_schema)
         
-        return self.get_sdf(catalog, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema, default_order_by)
+        return self.get_sdf(catalog, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs)
 
 
     def print_command(self, sql):
@@ -805,7 +804,7 @@ class SqlDataFrame:
 
 
 
-    def __init__(self, dbconn, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by):
+    def __init__(self, dbconn, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs):
         self.dbconn = dbconn
         self.catalog = catalog
         self.sdf_name = sdf_name
@@ -813,14 +812,15 @@ class SqlDataFrame:
         self.dataset_schema = dataset_schema
         self.dataset_table = dataset_table
         self.key_column = key_column
-        self.fit_schema = fit_schema
+        self.fit_schema = fit_schema if fit_schema is not None else dataset_schema
         self.default_order_by = default_order_by
+        self.kwargs = kwargs
         
         self.transformations = []
 
 
     def __repr__(self):
-        return "SqlDataFrame(\ndbconn=%s,\ncatalog=%s,\nsdf_name=%s,\nsdf_query_data_source=%s,\ndataset_schema=%s,\ndataset_table=%s,\nkey_column=%s,\nfit_schema=%s,\ndefault_order_by=%s,\ntransformations=%s)" % (self.dbconn, \
+        return "SqlDataFrame(\ndbconn=%s,\ncatalog=%s,\nsdf_name=%s,\nsdf_query_data_source=%s,\ndataset_schema=%s,\ndataset_table=%s,\nkey_column=%s,\nfit_schema=%s,\ndefault_order_by=%s,\nkwargs=%s,\ntransformations=%s)" % (self.dbconn, \
             self.catalog, \
             self.sdf_name, \
             self.sdf_query_data_source, \
@@ -829,6 +829,7 @@ class SqlDataFrame:
             self.key_column, \
             self.fit_schema, \
             self.default_order_by,
+            self.kwargs,
             self.transformations)
 
 
@@ -844,7 +845,7 @@ class SqlDataFrame:
         sdf_name = sdf_name if (sdf_name is not None) else self.sdf_name
         catalog = self.catalog.clone(sdf_name)
         
-        return SqlDataFrame(self.dbconn, catalog, sdf_name, self.sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by)
+        return SqlDataFrame(self.dbconn, catalog, sdf_name, self.sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by, **self.kwargs)
 
 
     # creates copy of the sdf, with the transform sql of this sdf as a data source in the new sdf
@@ -879,7 +880,7 @@ class SqlDataFrame:
         catalog = self.catalog.clone(sdf_name)
         sdf_query_data_source =  '(' + self.generate_sql(include_source_columns, limit, include_all_source_columns, order_by) + ')'
 
-        return SqlDataFrame(self.dbconn, catalog, sdf_name, sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by)
+        return SqlDataFrame(self.dbconn, catalog, sdf_name, sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by, **self.kwargs)
 
 
     def add_column_to_output(self, source_column, target_column):
@@ -958,7 +959,7 @@ class SqlDataFrame:
             Parameters
             ----------
             include_source_columns : bool
-                If True, fFor each transformed column add the source column into output.
+                If True, for each transformed column add the source column into output.
 
             limit : int
                 The number of output rows. If None, all rows are included.
@@ -1461,14 +1462,18 @@ class SqlDataFrame:
         test_sdf_name = test_sdf_name if (test_sdf_name is not None) else self.sdf_name
         test_catalog = self.catalog.clone(test_sdf_name)
 
+        print("starting creating sdfs...")#debug
         train_sdf = self.dbconn.get_sdf_for_table(train_sdf_name, self.fit_schema, train_table, self.key_column, self.fit_schema, self.default_order_by, train_catalog)
         test_sdf = self.dbconn.get_sdf_for_table(test_sdf_name, self.fit_schema, test_table, self.key_column, self.fit_schema, self.default_order_by, test_catalog)
 
+        print("finished creating sdfs...")#debug
+
         if (y_column is not None):
             # returns X_train, X_test, y_train, y_test 
+            print("starting the y_column function...")#debug
             y_train_df = train_sdf.get_y_df(y_column)
             y_test_df = test_sdf.get_y_df(y_column)
-
+            print("finished the y_column function...")#debug
             return train_sdf, test_sdf, y_train_df, y_test_df
         else:
             # returns X_train, X_test
@@ -1481,7 +1486,7 @@ class SqlDataFrame:
         sql = 'SELECT setseed(' + str(random_state) + ');\n'
         sql += 'SELECT * INTO ' + self.fit_schema + '.' + test_table + '\nFROM ' + self.sdf_query_data_source + '\nORDER BY random() LIMIT '
         sql += '(SELECT count(*) * ' + str(test_size) + ' FROM ' + self.sdf_query_data_source + ')'
-
+        print(f"self catalog : {self.catalog}")#debug
         self.dbconn.drop_table(self.fit_schema, test_table)
         self.catalog.un_register_table(self.fit_schema, test_table)
         self.dbconn.execute_command(sql)
@@ -1492,7 +1497,7 @@ class SqlDataFrame:
         sql = 'SELECT setseed(' + str(random_state) + ');\n'
         sql += 'SELECT * INTO ' + self.fit_schema + '.' + train_table + '\nFROM ' + self.sdf_query_data_source + '\nORDER BY random() LIMIT '
         sql += 'ALL OFFSET (SELECT count(*) * ' + str(test_size) + ' FROM ' + self.sdf_query_data_source + ')'
-
+        print(f"self catalog : {self.catalog}")
         self.dbconn.drop_table(self.fit_schema, train_table)
         self.catalog.un_register_table(self.fit_schema, train_table)
         self.dbconn.execute_command(sql)

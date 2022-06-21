@@ -1,5 +1,8 @@
 # Transformation tests - validation of identical results with Sklearn
 #----------------------------------------------------------------
+#append system path to import cousin packages
+import sys
+sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SDPL - Public Version v2")
 
 from sql_preprocessing import *
 import pandas as pd
@@ -7,7 +10,7 @@ from sklearn.preprocessing import *
 
 
 
-dbconn = SqlConnection("postgres://postgres:password@localhost:5432/db1", print_sql=True)
+dbconn = SqlConnection("postgresql://weisun:password@localhost:5432/db1", print_sql=True)
 
 csv_file = "simulated_dataset.csv"
 db_schema = "s1"
@@ -35,7 +38,7 @@ sdf.add_unique_id_column()
 # comparison of functions
 results = ComparisonArray()
 
-compare_functions_noargs (Binarizer(50), SqlBinarizer(50), 'Binarizer', csv_file, sdf.clone(), 'code_20', True, '100 ints (thr 50)', 0, 'index', results)
+compare_functions_noargs (Binarizer(threshold=50), SqlBinarizer(50), 'Binarizer', csv_file, sdf.clone(), 'code_20', True, '100 ints (thr 50)', 0, 'index', results)
 #check for binary column case
 
 compare_functions_noargs (OneHotEncoder(categories='auto'), SqlOneHotEncoder(), 'OneHotEncoder', csv_file, sdf.clone(), 'code_20', True, '100 int labels', 0, 'index', results)

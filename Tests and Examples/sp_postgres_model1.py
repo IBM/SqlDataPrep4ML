@@ -4,13 +4,17 @@
 # Setup is described in README.md
 #----------------------------------------------------------------
 
+#append system path to import cousin packages
+import sys
+sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SDPL - Public Version v2")
+
 from sql_preprocessing import *
 import pandas as pd
 
 
 # Postgress connection
 # User: postgress, password: password
-dbconn = SqlConnection("postgres://postgres:password@localhost:5432/db1", print_sql=True)
+dbconn = SqlConnection("postgresql://weisun:password@localhost:5432/db1", print_sql=True)
 
 
 # Database functions
@@ -50,7 +54,7 @@ mapper = SqlDataFrameMapper([
 ])
 
 mapper.fit_transform(test_sdf)
-x_test = test_sdf.execute_df(return_df = True, order_by='index')
+x_test = test_sdf.execute_df(return_df = True, order_by='index') # column index is not automatically generated
 y_target_test = test_sdf.get_y_df('prediction', order_by='index')
 
 mapper.fit_transform(train_sdf)
