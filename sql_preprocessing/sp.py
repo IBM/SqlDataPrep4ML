@@ -944,7 +944,7 @@ class SqlDataFrame:
         """
 
         for i in range(len(source_columns)):
-            self.transformations.append(self.Transformation(source_columns[i], target_columns[i], column_functions[i], None), sub_table if i == 0 else None)
+            self.transformations.append(self.Transformation(source_columns[i], target_columns[i], column_functions[i], None, sub_table if i == 0 else None))
 
 
     def generate_sql (self, \

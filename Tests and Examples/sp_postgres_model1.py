@@ -54,12 +54,12 @@ mapper = SqlDataFrameMapper([
 ])
 
 mapper.fit_transform(test_sdf)
-x_test = test_sdf.execute_df(return_df = True, order_by='index') # column index is not automatically generated
-y_target_test = test_sdf.get_y_df('prediction', order_by='index')
+x_test = test_sdf.execute_df(return_df = True, order_by='prediction') # column index is not automatically generated
+y_target_test = test_sdf.get_y_df('prediction', order_by='prediction')
 
 mapper.fit_transform(train_sdf)
-x_train = train_sdf.execute_df(return_df = True, order_by='index')
-y_target_train = train_sdf.get_y_df('prediction', order_by='index')
+x_train = train_sdf.execute_df(return_df = True, order_by='prediction')
+y_target_train = train_sdf.get_y_df('prediction', order_by='prediction')
 
 
 #invoke linear regression 
