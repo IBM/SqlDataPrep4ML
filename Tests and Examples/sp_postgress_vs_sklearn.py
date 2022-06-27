@@ -1,6 +1,6 @@
 #append system path to import cousin packages
 import sys
-sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SDPL - Public Version v2")
+sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SQLDATAPREP4ML")
 
 import pandas as pd
 import numpy as np

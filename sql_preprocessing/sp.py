@@ -279,7 +279,7 @@ class SqlConnection:
         """
 
         self.print_command(sql)
-        return pd.read_sql_query(sql, self.engine)
+        return pd.read_sql_query(sql, self.conn)
 
 
     def get_table_as_df(self, schema, table, order_by=None):
@@ -1462,18 +1462,15 @@ class SqlDataFrame:
         test_sdf_name = test_sdf_name if (test_sdf_name is not None) else self.sdf_name
         test_catalog = self.catalog.clone(test_sdf_name)
 
-        print("starting creating sdfs...")#debug
         train_sdf = self.dbconn.get_sdf_for_table(train_sdf_name, self.fit_schema, train_table, self.key_column, self.fit_schema, self.default_order_by, train_catalog)
         test_sdf = self.dbconn.get_sdf_for_table(test_sdf_name, self.fit_schema, test_table, self.key_column, self.fit_schema, self.default_order_by, test_catalog)
 
-        print("finished creating sdfs...")#debug
-
         if (y_column is not None):
             # returns X_train, X_test, y_train, y_test 
-            print("starting the y_column function...")#debug
+
             y_train_df = train_sdf.get_y_df(y_column)
             y_test_df = test_sdf.get_y_df(y_column)
-            print("finished the y_column function...")#debug
+
             return train_sdf, test_sdf, y_train_df, y_test_df
         else:
             # returns X_train, X_test
@@ -1486,7 +1483,7 @@ class SqlDataFrame:
         sql = 'SELECT setseed(' + str(random_state) + ');\n'
         sql += 'SELECT * INTO ' + self.fit_schema + '.' + test_table + '\nFROM ' + self.sdf_query_data_source + '\nORDER BY random() LIMIT '
         sql += '(SELECT count(*) * ' + str(test_size) + ' FROM ' + self.sdf_query_data_source + ')'
-        print(f"self catalog : {self.catalog}")#debug
+
         self.dbconn.drop_table(self.fit_schema, test_table)
         self.catalog.un_register_table(self.fit_schema, test_table)
         self.dbconn.execute_command(sql)
@@ -1497,7 +1494,7 @@ class SqlDataFrame:
         sql = 'SELECT setseed(' + str(random_state) + ');\n'
         sql += 'SELECT * INTO ' + self.fit_schema + '.' + train_table + '\nFROM ' + self.sdf_query_data_source + '\nORDER BY random() LIMIT '
         sql += 'ALL OFFSET (SELECT count(*) * ' + str(test_size) + ' FROM ' + self.sdf_query_data_source + ')'
-        print(f"self catalog : {self.catalog}")
+
         self.dbconn.drop_table(self.fit_schema, train_table)
         self.catalog.un_register_table(self.fit_schema, train_table)
         self.dbconn.execute_command(sql)
