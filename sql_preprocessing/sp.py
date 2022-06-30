@@ -138,14 +138,14 @@ class SqlConnection:
             Parameters
             ----------
             sql : string
-                The sql to print.
+                The sql statement to print.
         """
         if (self.print_sql):
             print("\n" + sql)
 
 
     def execute_command(self, sql):
-        """Executes SQL statement with not output.
+        """Executes SQL statement with no output.
 
             Parameters
             ----------
@@ -1073,7 +1073,7 @@ class SqlDataFrame:
                 If True, returns pandas.DataFrame, otherwise numpy.array.
 
             include_source_columns : bool
-                If True, fFor each transformed column add the source column into output.
+                If True, for each transformed column add the source column into output.
 
             order_by : string
                 Defines the order of rows.
@@ -1122,7 +1122,7 @@ class SqlDataFrame:
 
 
     def get_table_size(self):
-        """Returns the number of riws in the underlying dataset.
+        """Returns the number of rows in the underlying dataset.
         """
 
         sql = 'SELECT COUNT(*) FROM ' + self.sdf_query_data_source
@@ -1283,7 +1283,7 @@ class SqlDataFrame:
             Parameters
             ----------
             column : string
-                If provided, the colum is created and key_column is set the new balue.
+                If provided, the colum is created and key_column is set the new value.
                 If not provided, the SDF.key_column is used.
         """
 
