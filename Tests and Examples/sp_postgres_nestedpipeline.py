@@ -4,6 +4,10 @@
 # Setup is described in README.md
 #----------------------------------------------------------------
 
+#append system path to import cousin packages
+import sys
+sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SQLDATAPREP4ML")
+
 from sql_preprocessing import *
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
@@ -14,7 +18,7 @@ from sklearn.preprocessing import *
 
 # Postgress connection
 # User: postgress, password: password
-dbconn = SqlConnection("postgres://postgres:password@localhost:5432/db1", print_sql=True)
+dbconn = SqlConnection("postgresql://weisun:password@localhost:5432/db1", print_sql=True)
 
 
 # Database functions
@@ -37,7 +41,7 @@ if (not dbconn.table_exists(dataset_schema, dataset_table)):
     dbconn.upload_df_to_db(df, dataset_schema, dataset_table) 
 
 # create SqlDataFrame pointing to table s1.sd_1 (loaded above)
-sdf = dbconn.get_sdf_for_table(sdf_name, dataset_schema, dataset_table, key_column, catalog_schema, fit_schema, default_order_by, **db_args)
+sdf = dbconn.get_sdf_for_table(sdf_name, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **db_args)
 
 # create unique key on the new table (with the name "key_column")
 #sdf.add_unique_id_column()
@@ -45,9 +49,9 @@ sdf = dbconn.get_sdf_for_table(sdf_name, dataset_schema, dataset_table, key_colu
 
 #split the dataset - to training and test
 #x_train, x_test, y_target_train, y_target_test = cross_validation.train_test_split(tmp_x, tmp_y, test_size=0.25, random_state=0)
-x_train_sdf, x_test_sdf = sdf.train_test_split(test_size=0.25, random_state=0)
-y_train_df = x_train_sdf.get_y_df('prediction')
-y_test_df = x_test_sdf.get_y_df('prediction')
+x_train_sdf, x_test_sdf, y_train_df, y_test_df = sdf.train_test_split(test_size=0.25, random_state=0, y_column='prediction')
+# y_train_df = x_train_sdf.get_y_df('prediction')
+# y_test_df = x_test_sdf.get_y_df('prediction')
 
 
 

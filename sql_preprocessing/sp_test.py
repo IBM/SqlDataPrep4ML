@@ -509,8 +509,8 @@ class Test_SqlDataFrame_table(unittest.TestCase):
         df1 = self.sdf.get_table_column_df(key_column, return_df=True)
         self.assertEqual(self.test_df.shape[0], df1.shape[0])
 
-    introduce function which will put double quotues around all column names - but only if needed i.e. for postgres but not for db2
-    which effectively means its goinig to be case sensistive 
+    #introduce function which will put double quotues around all column names - but only if needed i.e. for postgres but not for db2
+    #which effectively means its goinig to be case sensistive 
     #https://lerner.co.il/2013/11/30/quoting-postgresql/
 
     def test_get_table_column_df_limit(self):
