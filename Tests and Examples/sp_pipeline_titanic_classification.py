@@ -58,7 +58,7 @@ preprocessor_db = SqlColumnTransformer(
     transformers=[
         ('age', SqlSimpleImputer(strategy='mean'), 'age'),
         ('pclass', SqlOneHotEncoder(), 'pclass'),
-        ('sex', SqlLabelEncoder(), 'sex')
+        ('sex', SqlOrdinalEncoder(), 'sex')
     ]
 )
 
@@ -66,7 +66,7 @@ preprocessor_df = ColumnTransformer(
     transformers=[
         ('Age', SimpleImputer(strategy='mean'), ['Age']),
         ('Pclass', OneHotEncoder(), ['Pclass']),
-        ('Sex', LabelEncoder(), ['Sex'])
+        ('Sex', OrdinalEncoder(), ['Sex'])
     ]
 )
 
