@@ -4,6 +4,10 @@
 # Setup is described in README.md
 #----------------------------------------------------------------
 
+#append system path to import cousin packages
+import sys
+sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SQLDATAPREP4ML")
+
 from sql_preprocessing import *
 import pandas as pd
 from sklearn.preprocessing import *
@@ -11,7 +15,7 @@ from sklearn.preprocessing import *
 
 # Postgress connection
 # User: postgress, password: password
-dbconn = SqlConnection("postgres://postgres:password@localhost:5432/db1", print_sql=True)
+dbconn = SqlConnection("postgresql://weisun:password@localhost:5432/db1", print_sql=True)
 
 
 # Database functions
@@ -32,7 +36,7 @@ if (not dbconn.table_exists(db_schema, db_table)):
 
 # create SqlDataFrame pointing to table s1.sd1 (loaded above)
 # the default_order_by is needed in order to guarantee same order of rows as is in the source dataframe - after storing records from csv/dataframe to db, rows may have different order
-sdf = dbconn.get_sdf_for_table(db_table, db_schema, db_table, key_column, default_order_by='index')
+sdf = dbconn.get_sdf_for_table(db_table, db_schema, db_table, key_column, default_order_by='prediction')
 
 # create unique key on the new table (with the name "key_column") - this is needed for some of the functions which require key column to match results of subqueries such as normalizer
 sdf.add_unique_id_column()

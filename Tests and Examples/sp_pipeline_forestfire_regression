@@ -1,0 +1,104 @@
+#----------------------------------------------------------------
+# SQL Preprocessing Pipeline Titanic Classification Example
+# Postgres based examples - https://www.postgresql.org/
+# Setup is described in README.md
+#----------------------------------------------------------------
+
+#append system path to import cousin packages
+import sys
+sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SQLDATAPREP4ML")
+
+from sql_preprocessing import *
+import pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.compose import *
+from sklearn.preprocessing import *
+from sklearn.pipeline import *
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+
+
+# Postgress connection
+# User: postgress, password: password
+dbconn = SqlConnection("postgresql://weisun:password@localhost:5432/db1", print_sql=True)
+
+
+# Database functions
+#----------------------------------------------------------------
+
+csv_file = "forestfires.csv"
+sdf_name = 'forestfires'
+dataset_schema = 's1'
+dataset_table = 'forestfires'
+key_column = 'index'
+catalog_schema = dataset_schema
+fit_schema = dataset_schema
+default_order_by = None
+db_args = {}
+
+# load csv and store it to db (if does not exist yet)
+df = pd.read_csv(csv_file)
+
+# create SqlDataFrame pointing to table s1.sd_1 (loaded above)
+dbconn.upload_df_to_db(df, dataset_schema, dataset_table)
+sdf = dbconn.get_sdf_for_table(sdf_name, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **db_args)
+sdf.add_unique_id_column('index')
+
+#split the dataset - to training and test
+#x_train, x_test, y_target_train, y_target_test = cross_validation.train_test_split(tmp_x, tmp_y, test_size=0.25, random_state=0)
+x_train_sdf1, x_test_sdf1, y_train_df1, y_test_df1 = sdf.train_test_split(test_size=0.25, random_state=-1, y_column='area')
+
+x_df = df.drop('area', axis=1)
+y_df = df['area']
+x_train_df2, x_test_df2, y_train_df2, y_test_df2 = train_test_split(x_df, y_df,test_size=0.25, random_state=0)
+
+preprocessor_db = SqlColumnTransformer(
+    transformers=[
+        ('month', SqlOrdinalEncoder(), 'month'),
+        ('day', SqlOrdinalEncoder(), 'day'),
+        ('ffmc', SqlStandardScaler(), 'ffmc'),
+        ('dmc', SqlMinMaxScaler(), 'dmc'),
+        ('isi', SqlMaxAbsScaler(), 'isi'),
+        ('temp', SqlStandardScaler(), 'temp'),
+        ('rain', SqlBinarizer(threshold=0), 'rain'),
+        (['rh'], SqlNormalizer(), ['rh'])
+    ]
+)
+
+preprocessor_df = ColumnTransformer(
+    transformers=[
+        ('month', OrdinalEncoder(), ['month']),
+        ('day', OrdinalEncoder(), ['day']),
+        ('ffmc', StandardScaler(), ['ffmc']),
+        ('dmc', MinMaxScaler(), ['dmc']),
+        ('isi', MaxAbsScaler(), ['isi']),
+        ('temp', StandardScaler(), ['temp']),
+        ('rain', Binarizer(threshold=0), ['rain']),
+        ('rh', StandardScaler(), ['rh'])
+    ]
+)
+
+pipeline_db = SqlPipeline(steps=[
+    ('preprocessor', preprocessor_db),
+    ('regressor', RandomForestRegressor())
+    ])
+
+print(pipeline_db)
+
+pipeline_df = Pipeline(steps=[
+    ('preprocessor', preprocessor_df),
+    ('regressor', RandomForestRegressor())
+    ])
+
+print(pipeline_df)
+
+pipeline_db.fit(x_train_sdf1, y_train_df1)
+
+print("Sql preprocessing model score: %.3f" % pipeline_db.score(x_test_sdf1, y_test_df1))
+
+pipeline_df.fit(x_train_df2, y_train_df2)
+
+print("sklearn preprocessing model score: %.3f" % pipeline_df.score(x_test_df2, y_test_df2))
+
+# Sql preprocessing model score: -2.430
+# sklearn preprocessing model score: -0.130
