@@ -22,16 +22,14 @@ from sklearn.model_selection import train_test_split
 le1 = LabelEncoder()
 sql_le1 = SqlLabelEncoder()
 
-comparator1 = SpComparator(sql_le1, le1)
-print(f"Example 1: \n \t LabelEncoder is the same to SqlLabelEncoder, the test results is : {comparator1.is_equal()}")
+print(f"Example 1: \n \t LabelEncoder is the same to SqlLabelEncoder, the test results is : {sql_le1.equal_to_sklean(le1)}")
 
 # Example 2: SimpleImputer vs SqlSimpleImputer
 
 si2 = SimpleImputer(strategy='mean')
 sql_si2 = SqlSimpleImputer(strategy='most_frequent')
 
-comparator2 = SpComparator(sql_si2, si2)
-print(f"Example 2: \n \t SimpleImputer is different in 'strategy' to SqlLabelEncoder, the test results is : {comparator2.is_equal()}")
+print(f"Example 2: \n \t SimpleImputer is different in 'strategy' to SqlLabelEncoder, the test results is : {sql_si2.equal_to_sklean(si2)}")
 
 # Example 3: Pipeline vs converted SqlPipeline
 
@@ -51,8 +49,7 @@ pipeline_df3 = Pipeline(steps=[
 pipeline_converter3 = SqlPipelineConverter(pipeline_df3)
 converted_pipeline_df3 = pipeline_converter3.get_sql_pipeline()
 
-comparator3 = SpComparator(converted_pipeline_df3, pipeline_df3)
-print(f"Example 3: \n \t Pipeline is the same with converted SqlPipeline, the test results is : {comparator3.is_equal()}")
+print(f"Example 3: \n \t Pipeline is the same with converted SqlPipeline, the test results is : {converted_pipeline_df3.equal_to_sklean(pipeline_df3)}")
 
 # Example 4: Pipeline (nested) vs converted SqlPipeline
 
@@ -82,8 +79,7 @@ pipeline_df4 = Pipeline(steps=[
 pipeline_converter4 = SqlPipelineConverter(pipeline_df4)
 converted_pipeline_df4 = pipeline_converter4.get_sql_pipeline()
 
-comparator4 = SpComparator(converted_pipeline_df4, pipeline_df4)
-print(f"Example 4: \n \t Pipeline is the same with converted SqlPipeline, the test results is : {comparator4.is_equal()}")
+print(f"Example 4: \n \t Pipeline is the same with converted SqlPipeline, the test results is : {converted_pipeline_df4.equal_to_sklean(pipeline_df4)}")
 
 # Example 5: Pipeline vs SqlPipeline
 
@@ -123,5 +119,4 @@ pipeline_df5 = Pipeline(steps=[
     ('regressor', LinearRegression())
     ])
 
-comparator5 = SpComparator(pipeline_sdf5, pipeline_df5)
-print(f"Example 5: \n \t Pipeline is different with SqlPipeline, the test results is : {comparator5.is_equal()}")
+print(f"Example 5: \n \t Pipeline is different with SqlPipeline, the test results is : {pipeline_sdf5.equal_to_sklean(pipeline_df5)}")
