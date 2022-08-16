@@ -1551,6 +1551,7 @@ class SklearnToSqlConverter:
         if (sklearn_type is sp.MaxAbsScaler): sql_function = SqlMaxAbsScaler()
         if (sklearn_type is sp.Binarizer): sql_function = SqlBinarizer()
         if (sklearn_type is sp.StandardScaler): sql_function = SqlStandardScaler()
+        if (sklearn_type is sp.RobustScaler): sql_function = SqlRobustScaler()
         if (sklearn_type is sp.LabelEncoder): sql_function = SqlLabelEncoder()
         if (sklearn_type is sp.OrdinalEncoder): sql_function = SqlOrdinalEncoder()
         if (sklearn_type is sp.OneHotEncoder): sql_function = SqlOneHotEncoder()
@@ -2176,6 +2177,108 @@ class SqlStandardScaler (SqlFunction):
         return True
 
 # end of class SqlStandardScaler
+
+
+
+
+
+
+
+# Class: RobustScaler
+# Scale each feature by its percentiles.
+"""
+-- The standard score of a sample x is calculated as:
+-- z = (x - m) / (q_max - q_min)
+-- where m is the median of the training samples
+-- and q_max, q_min is the customized percentile values of the training samples
+"""
+# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.RobustScaler.html
+# fit - Compute the mean and quantiles to be used for later scaling.
+# transform - Scaling features of X according to feature_range.
+class SqlRobustScaler (SqlFunction):
+
+
+    def __init__(self, target_column = None, pmin = 0.25, pmax = 0.75):
+        self.target_column = target_column
+        self.pmin = pmin
+        self.pmax = pmax
+
+
+    def __repr__(self, target_column = None):
+        return "SqlStandardScaler(target_column=%s, qmin = %f, qmax = %f)" % (self.target_column, self.qmin, self.qmax)
+
+
+    def fit(self, sdf, column):
+
+        # compute the mean and quantile values
+        # sql = "SELECT percentile_disc(0.5) within group (order by " + sdf + "." + column + ") AS median,"
+        # sql += "SELECT percentile_disc(" + self.qmin + ") within group (order by " + sdf + "." + column + ") AS qmin,"
+        # sql += "SELECT percentile_disc(" + self.qmax + ") within group (order by " + sdf + "." + column + ") AS qmax"
+        sql = "SELECT percentile_cont(0.5) within group (order by " + sdf + "." + column + ") AS median,"
+        sql += "SELECT percentile_cont(" + self.pmin + ") within group (order by " + sdf + "." + column + ") AS qmin,"
+        sql += "SELECT percentile_cont(" + self.pmax + ") within group (order by " + sdf + "." + column + ") AS qmax"
+        sql += "\nFROM " + sdf.sdf_query_data_source + " AS data_table"
+        
+        row = sdf.dbconn.execute_query_onerow(sql)
+
+        if row is not None:
+            self.median_value = row[0]
+            self.qmin_value = row[1]
+            self.qmax_value = row[2]
+            
+
+    def transform(self, sdf, columns):
+        column = columns if (not isinstance(columns, list)) else columns[0]
+        target_column = self.target_column if (self.target_column is not None) else column
+        #sdf.add_single_column_transformation(column, column + "_encoded", "round((CAST(" + column + " AS FLOAT) - " + str(self.mean_value) + ") / " + str(self.stddev_value) + ")", None)
+        sdf.add_single_column_transformation(column, target_column, "(CAST(" + column + " AS FLOAT) - " + str(self.median_value) + ") / (" + str(self.qmax_value) + " - " + str(self.qmin_value) + ")", None)
+
+
+    def load_from_sklearn(self, sklearn_function, sdf, column):
+        if (type(sklearn_function) is not sp.RobustScaler): raise ValueError("argument is not of type sklearn.preprocessing.StandardScaler")
+        self.median_value = sklearn_function.center_[0]
+        self.qmin_value = 1.0
+        self.qmax_value = sklearn_function.scale_[0] + 1.0
+        return self
+
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlStandardScaler is the same to sklearn.preprocessing.StandardScaler
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
+# end of class SqlRobustScaler
+
+# TODO: PowerTransformer and QuantileTransformer
+# BLOCKER: How to get optimized lambda for PowerTransformer through DB query?
+# How to get quantiles of the data efficiently through DB query?
 
 
 

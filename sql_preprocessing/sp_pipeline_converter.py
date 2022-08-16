@@ -5,19 +5,20 @@ from sklearn.impute import SimpleImputer
 from sklearn import set_config
 
 class SqlPipelineConverter():
-    """
-    Convert sklearn.Pipeline into SqlNestedPipeline
+    """Convert sklearn.pipeline.Pipeline into SqlNestedPipeline
+
+    Parameters
+    ----------
+        sklearn_pipeline: sklearn.pipeline.Pipeline
+            The sklearn pipeline object to be converted
+        sql_pipeline: SqlPipeline
+            The converted SqlPipeline object
     """
 
     def __init__(self, sklearn_pipeline=None, sql_pipeline=None):
         self.sklearn_pipeline=sklearn_pipeline
         self.sql_pipeline=None
 
-    def print_sklearn_pipeline(self):
-        print(self.sklearn_pipeline)
-
-    def print_sql_pipeline(self):
-        print(self.sql_pipeline)
 
     def _convert_function(self, sklearn_function):
         
@@ -41,9 +42,19 @@ class SqlPipelineConverter():
 
         return sql_function
 
+
     def convert(self):
-        if not isinstance(self.sklearn_pipeline, Pipeline):
-            raise TypeError('The pipeline is not a valid sklearn.pipeline.Pipeline')
+        """ Convert self.sklearn_pipeline into SqlPipeline object
+            The steps for each column is transformed automatically
+
+        Returns
+        ---------
+            SqlPipeline:
+                An instance of :class: `SqlPipeline` with the same steps in the original sklearn pipeline
+        """
+        if not self.eligible_to_transform_sqlPipeline():
+            print("The pipeline contains unsupported functions {}")
+            return None
 
         sql_steps = []
 
@@ -117,11 +128,93 @@ class SqlPipelineConverter():
 
         return converted_sql_pipeline
 
+
+    def eligible_to_transform_sqlPipeline(self):
+        """ Test if the sklearn pipeline can be converted into SqlPipeline
+           
+           Returns: bool
+           should contains more information
+
+            Raises
+            ---------
+            TypeError:
+                when self.sklearn_pipeline is not a valid instance of sklearn.pipeline.Pipeline
+            ValueError:
+                when the transformer functions in sklearn pipeline is not supported in SqlPipeline
+        """
+
+        if not isinstance(self.sklearn_pipeline, Pipeline):
+            raise TypeError('The pipeline is not a valid sklearn.pipeline.Pipeline')
+
+        original_steps = self._get_pipeline_steps(self.sklearn_pipeline)
+
+        supported_functions = [
+            "MinMaxScaler",
+            "MaxAbsScaler",
+            "StandardScaler",
+            "RobustScaler",
+            "Binarizer",
+            "LabelEncoder",
+            "OrdinalEncoder",
+            "OneHotEncoder",
+            "LabelBinarizer",
+            "Normalizer",
+            "KernelCenterer",        
+            "SimpleImputer",
+            "Pipeline"
+        ]
+
+        unsupported_functions = []
+
+        for step_name in original_steps.keys():
+            if step_name != "regressor":
+                for function in original_steps[step_name]:
+                    if function not in supported_functions:
+                        unsupported_functions.append(function)
+        
+        return unsupported_functions
+
+
+    def _get_pipeline_steps(self, sklearn_object):
+        column_steps = defaultdict(list)
+
+        steps = sklearn_object.named_steps
+        for step in steps:
+            step_type = sklearn_object.named_steps.get(step).__class__.__name__
+            if step_type == 'ColumnTransformer':
+                transformers = steps.get(step).transformers
+                for transformer in transformers:
+                    name, functions, columns = transformer
+                    if isinstance(functions, sklearn.pipeline.Pipeline):
+                        nested_steps = functions.named_steps
+                        for nested_step in nested_steps:
+                            nested_function = nested_steps.get(nested_step)
+                            if len(columns) > 1:
+                                for column in columns:
+                                    column_steps[column].append((nested_function.__class__.__name__, name))
+                            else:
+                                column_steps[columns].append(nested_function.__class__.__name__, name)
+                    else:
+                        if len(columns) > 1:
+                            for column in columns:
+                                column_steps[column].append((functions.__class__.__name__, name))
+                        else:
+                            column_steps[columns[0]].append((functions.__class__.__name__, name))
+            else:
+                # print(f"step is {step}")
+                column_steps['regressor'].append((step_type, step))
+
+        # print(f"sklearn pipeline steps dict : \n {column_steps}")
+        
+        return column_steps
+
+
     def get_sql_pipeline(self):
         if self.sql_pipeline == None:
             return self.convert()
         else:
             return self.sql_pipeline
+
 
     def display_sql_pipeline(self):
         if self.sql_pipeline is None:
@@ -132,9 +225,15 @@ class SqlPipelineConverter():
         set_config(display='diagram')
         return dummpyPipeline
 
+
     def display_sklearn_pipeline(self):
         set_config(display='diagram')
         return self.sklearn_pipeline
+
+
+    def output_sklearn_pipeline(self):
+        print(self.sklearn_pipeline)
+
 
     def output_sql_pipeline(self, nested_indent = 4):
         space = ' '
@@ -156,7 +255,5 @@ class SqlPipelineConverter():
                 print(f'{space*current_indent}{step[1]}')
         print(']')
 
-
-        
-        
+# end of class SqlPipelineConverter
 
