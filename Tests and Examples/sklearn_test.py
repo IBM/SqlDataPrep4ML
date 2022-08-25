@@ -1,3 +1,7 @@
+#append system path to import cousin packages
+import sys
+sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SQLDATAPREP4ML")
+
 from sql_preprocessing import *
 import pandas as pd
 import sqlalchemy
@@ -38,7 +42,7 @@ dataset_schema = 'S1'
 dataset_table = 'TITANIC'
 key_column = 'passengerid'
 
-connection_string = "postgres://postgres:password@localhost:5432/db1"
+connection_string = "postgresql://weisun:password@localhost:5432/db1"
 
 
 
@@ -54,6 +58,8 @@ print(np.array_equal(df2.to_numpy(), df1.to_numpy()))
 
 
 x_train_sdf, x_test_sdf, y_train_df1, y_test_df1 = sdf.train_test_split(test_size=0.25, random_state=0, y_column='survived')
+# x_train_sdf, x_test_sdf = sdf.train_test_split(test_size=0.25, random_state=0)
+
 
 
 

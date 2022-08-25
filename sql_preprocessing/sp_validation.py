@@ -156,6 +156,7 @@ def compare_arrays(sklearn_array, sql_array, compare_tolerance):
 
 
     # comparison of two arrays - this appraoch does not require much of rounding
+    print(f"datatype check -------- \n sklearn_array : \n {type(sklearn_array[0][0])}: \n {sklearn_array[0:5]} \n sql_array : \n {type(sql_array[0][0])} {sql_array[0:5]}")
     arrays_equal = np.allclose(sklearn_array, sql_array, atol=compare_tolerance)
     print('Arrays are allclose     : ' + str(arrays_equal))
 

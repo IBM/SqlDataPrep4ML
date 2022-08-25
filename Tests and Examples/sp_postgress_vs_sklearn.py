@@ -1,3 +1,7 @@
+#append system path to import cousin packages
+import sys
+sys.path.append("/Users/weisun/Coding Projects/Machine Learning/SQLDATAPREP4ML")
+
 import pandas as pd
 import numpy as np
 import scipy
@@ -20,7 +24,7 @@ lb_results = lb.transform(df['code_20'])
 
 
 # Example 1 - SQL + Label Binarizer
-sdf = SqlDataFrame('postgres://postgres:password@localhost:5432/db1', 'ds1', 'schema')
+sdf = SqlDataFrame('postgresql://weisun:password@localhost:5432/db1', 'ds1', 'schema')
 
 lb = SqlLabelBinarizer()
 lb.fit(sdf, 'code_20')

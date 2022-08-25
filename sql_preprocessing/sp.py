@@ -15,13 +15,13 @@ Notes
 import sqlalchemy
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 import scipy
 from sklearn_pandas import DataFrameMapper
 import sklearn.preprocessing as sp
 import sklearn.compose
 from enum import Enum
 import joblib
-
 
 
 
@@ -87,7 +87,7 @@ class SqlConnection:
         return "SqlConnection(engine=%s, print_sql=%s, dbtype=%s, conn=%s)" % (self.engine, self.print_sql, self.dbtype, self.conn)
 
 
-    def get_sdf(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by):
+    def get_sdf(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs):
         """Creates a new instance of :class:`SqlDataFrame`.
         For description of parameters see documentation of :class:`SqlDataFrame`.
 
@@ -97,10 +97,10 @@ class SqlConnection:
             A new instance of :class:`SqlDataFrame`.
         """
 
-        return SqlDataFrame(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by)
+        return SqlDataFrame(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs)
 
 
-    def get_sdf_for_table(self, sdf_name, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None):
+    def get_sdf_for_table(self, sdf_name, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None, **kwargs):
         """Creates a new instance of :class:`SqlDataFrame` for an existing table or a view.
         For description of parameters see documentation of :class:`SqlDataFrame`.
 
@@ -113,10 +113,10 @@ class SqlConnection:
         sdf_query_data_source = dataset_schema + "." + dataset_table
         catalog = catalog if catalog is not None else InMemoryTableCatalog(self, sdf_name, dataset_schema, dataset_table, fit_schema)
 
-        return self.get_sdf(catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by)
+        return self.get_sdf(catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs)
 
 
-    def get_sdf_for_query(self, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None):
+    def get_sdf_for_query(self, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None, **kwargs):
         """Creates a new instance of :class:`SqlDataFrame` for a SQL query.
         Can be used only in limited cases (such as for nesting of sdfs) because many functions require table as source and not sql.
         For description of parameters see documentation of :class:`SqlDataFrame`.
@@ -130,7 +130,7 @@ class SqlConnection:
         sql_query = "(" + sql_query + ")"
         catalog = catalog if catalog is not None else InMemoryTableCatalog(self, sdf_name, dataset_schema, dataset_table, fit_schema)
         
-        return self.get_sdf(catalog, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema, default_order_by)
+        return self.get_sdf(catalog, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs)
 
 
     def print_command(self, sql):
@@ -139,14 +139,14 @@ class SqlConnection:
             Parameters
             ----------
             sql : string
-                The sql to print.
+                The sql statement to print.
         """
         if (self.print_sql):
             print("\n" + sql)
 
 
     def execute_command(self, sql):
-        """Executes SQL statement with not output.
+        """Executes SQL statement with no output.
 
             Parameters
             ----------
@@ -280,7 +280,7 @@ class SqlConnection:
         """
 
         self.print_command(sql)
-        return pd.read_sql_query(sql, self.engine)
+        return pd.read_sql_query(sql, self.conn)
 
 
     def get_table_as_df(self, schema, table, order_by=None):
@@ -805,7 +805,7 @@ class SqlDataFrame:
 
 
 
-    def __init__(self, dbconn, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by):
+    def __init__(self, dbconn, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs):
         self.dbconn = dbconn
         self.catalog = catalog
         self.sdf_name = sdf_name
@@ -813,14 +813,15 @@ class SqlDataFrame:
         self.dataset_schema = dataset_schema
         self.dataset_table = dataset_table
         self.key_column = key_column
-        self.fit_schema = fit_schema
+        self.fit_schema = fit_schema if fit_schema is not None else dataset_schema
         self.default_order_by = default_order_by
+        self.kwargs = kwargs
         
         self.transformations = []
 
 
     def __repr__(self):
-        return "SqlDataFrame(\ndbconn=%s,\ncatalog=%s,\nsdf_name=%s,\nsdf_query_data_source=%s,\ndataset_schema=%s,\ndataset_table=%s,\nkey_column=%s,\nfit_schema=%s,\ndefault_order_by=%s,\ntransformations=%s)" % (self.dbconn, \
+        return "SqlDataFrame(\ndbconn=%s,\ncatalog=%s,\nsdf_name=%s,\nsdf_query_data_source=%s,\ndataset_schema=%s,\ndataset_table=%s,\nkey_column=%s,\nfit_schema=%s,\ndefault_order_by=%s,\nkwargs=%s,\ntransformations=%s)" % (self.dbconn, \
             self.catalog, \
             self.sdf_name, \
             self.sdf_query_data_source, \
@@ -829,6 +830,7 @@ class SqlDataFrame:
             self.key_column, \
             self.fit_schema, \
             self.default_order_by,
+            self.kwargs,
             self.transformations)
 
 
@@ -844,7 +846,7 @@ class SqlDataFrame:
         sdf_name = sdf_name if (sdf_name is not None) else self.sdf_name
         catalog = self.catalog.clone(sdf_name)
         
-        return SqlDataFrame(self.dbconn, catalog, sdf_name, self.sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by)
+        return SqlDataFrame(self.dbconn, catalog, sdf_name, self.sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by, **self.kwargs)
 
 
     # creates copy of the sdf, with the transform sql of this sdf as a data source in the new sdf
@@ -879,7 +881,7 @@ class SqlDataFrame:
         catalog = self.catalog.clone(sdf_name)
         sdf_query_data_source =  '(' + self.generate_sql(include_source_columns, limit, include_all_source_columns, order_by) + ')'
 
-        return SqlDataFrame(self.dbconn, catalog, sdf_name, sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by)
+        return SqlDataFrame(self.dbconn, catalog, sdf_name, sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by, **self.kwargs)
 
 
     def add_column_to_output(self, source_column, target_column):
@@ -943,7 +945,7 @@ class SqlDataFrame:
         """
 
         for i in range(len(source_columns)):
-            self.transformations.append(self.Transformation(source_columns[i], target_columns[i], column_functions[i], None), sub_table if i == 0 else None)
+            self.transformations.append(self.Transformation(source_columns[i], target_columns[i], column_functions[i], None, sub_table if i == 0 else None))
 
 
     def generate_sql (self, \
@@ -958,7 +960,7 @@ class SqlDataFrame:
             Parameters
             ----------
             include_source_columns : bool
-                If True, fFor each transformed column add the source column into output.
+                If True, for each transformed column add the source column into output.
 
             limit : int
                 The number of output rows. If None, all rows are included.
@@ -1072,7 +1074,7 @@ class SqlDataFrame:
                 If True, returns pandas.DataFrame, otherwise numpy.array.
 
             include_source_columns : bool
-                If True, fFor each transformed column add the source column into output.
+                If True, for each transformed column add the source column into output.
 
             order_by : string
                 Defines the order of rows.
@@ -1121,7 +1123,7 @@ class SqlDataFrame:
 
 
     def get_table_size(self):
-        """Returns the number of riws in the underlying dataset.
+        """Returns the number of rows in the underlying dataset.
         """
 
         sql = 'SELECT COUNT(*) FROM ' + self.sdf_query_data_source
@@ -1282,7 +1284,7 @@ class SqlDataFrame:
             Parameters
             ----------
             column : string
-                If provided, the colum is created and key_column is set the new balue.
+                If provided, the colum is created and key_column is set the new value.
                 If not provided, the SDF.key_column is used.
         """
 
@@ -1466,6 +1468,7 @@ class SqlDataFrame:
 
         if (y_column is not None):
             # returns X_train, X_test, y_train, y_test 
+
             y_train_df = train_sdf.get_y_df(y_column)
             y_test_df = test_sdf.get_y_df(y_column)
 
@@ -1548,6 +1551,7 @@ class SklearnToSqlConverter:
         if (sklearn_type is sp.MaxAbsScaler): sql_function = SqlMaxAbsScaler()
         if (sklearn_type is sp.Binarizer): sql_function = SqlBinarizer()
         if (sklearn_type is sp.StandardScaler): sql_function = SqlStandardScaler()
+        if (sklearn_type is sp.RobustScaler): sql_function = SqlRobustScaler()
         if (sklearn_type is sp.LabelEncoder): sql_function = SqlLabelEncoder()
         if (sklearn_type is sp.OrdinalEncoder): sql_function = SqlOrdinalEncoder()
         if (sklearn_type is sp.OneHotEncoder): sql_function = SqlOneHotEncoder()
@@ -1888,6 +1892,36 @@ class SqlMinMaxScaler (SqlFunction):
         self.max_value = sklearn_function.data_max_[0]
         return self
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlMinMaxScaler is the same to sklearn.preprocessing.MinMaxScaler
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
 
 # end of class SqlMinMaxScaler
 
@@ -1940,6 +1974,39 @@ class SqlMaxAbsScaler (SqlFunction):
         return self
 
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlMaxAbsScaler is the same to sklearn.preprocessing.MaxAbsScaler
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlMaxAbsScaler
 
 
@@ -1983,6 +2050,40 @@ class SqlBinarizer (SqlFunction):
         if (type(sklearn_function) is not sp.Binarizer): raise ValueError("argument is not of type sklearn.preprocessing.Binarizer")
         self.threshold = sklearn_function.threshold
         return self
+
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlBinarizer is the same to sklearn.preprocessing.Binarizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sql_object, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = sql_object.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
 
 # end of class SqlBinarizer
 
@@ -2042,7 +2143,142 @@ class SqlStandardScaler (SqlFunction):
         self.stddev_value = sklearn_function.scale_[0]
         return self
 
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlStandardScaler is the same to sklearn.preprocessing.StandardScaler
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlStandardScaler
+
+
+
+
+
+
+
+# Class: RobustScaler
+# Scale each feature by its percentiles.
+"""
+-- The standard score of a sample x is calculated as:
+-- z = (x - m) / (q_max - q_min)
+-- where m is the median of the training samples
+-- and q_max, q_min is the customized percentile values of the training samples
+"""
+# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.RobustScaler.html
+# fit - Compute the mean and quantiles to be used for later scaling.
+# transform - Scaling features of X according to feature_range.
+class SqlRobustScaler (SqlFunction):
+
+
+    def __init__(self, target_column = None, pmin = 0.25, pmax = 0.75):
+        self.target_column = target_column
+        self.pmin = pmin
+        self.pmax = pmax
+
+
+    def __repr__(self, target_column = None):
+        return "SqlStandardScaler(target_column=%s, qmin = %f, qmax = %f)" % (self.target_column, self.qmin, self.qmax)
+
+
+    def fit(self, sdf, column):
+
+        # compute the mean and quantile values
+        # sql = "SELECT percentile_disc(0.5) within group (order by " + sdf + "." + column + ") AS median,"
+        # sql += "SELECT percentile_disc(" + self.qmin + ") within group (order by " + sdf + "." + column + ") AS qmin,"
+        # sql += "SELECT percentile_disc(" + self.qmax + ") within group (order by " + sdf + "." + column + ") AS qmax"
+        sql = "SELECT percentile_cont(0.5) within group (order by " + sdf + "." + column + ") AS median,"
+        sql += "SELECT percentile_cont(" + self.pmin + ") within group (order by " + sdf + "." + column + ") AS qmin,"
+        sql += "SELECT percentile_cont(" + self.pmax + ") within group (order by " + sdf + "." + column + ") AS qmax"
+        sql += "\nFROM " + sdf.sdf_query_data_source + " AS data_table"
+        
+        row = sdf.dbconn.execute_query_onerow(sql)
+
+        if row is not None:
+            self.median_value = row[0]
+            self.qmin_value = row[1]
+            self.qmax_value = row[2]
+            
+
+    def transform(self, sdf, columns):
+        column = columns if (not isinstance(columns, list)) else columns[0]
+        target_column = self.target_column if (self.target_column is not None) else column
+        #sdf.add_single_column_transformation(column, column + "_encoded", "round((CAST(" + column + " AS FLOAT) - " + str(self.mean_value) + ") / " + str(self.stddev_value) + ")", None)
+        sdf.add_single_column_transformation(column, target_column, "(CAST(" + column + " AS FLOAT) - " + str(self.median_value) + ") / (" + str(self.qmax_value) + " - " + str(self.qmin_value) + ")", None)
+
+
+    def load_from_sklearn(self, sklearn_function, sdf, column):
+        if (type(sklearn_function) is not sp.RobustScaler): raise ValueError("argument is not of type sklearn.preprocessing.StandardScaler")
+        self.median_value = sklearn_function.center_[0]
+        self.qmin_value = 1.0
+        self.qmax_value = sklearn_function.scale_[0] + 1.0
+        return self
+
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlStandardScaler is the same to sklearn.preprocessing.StandardScaler
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
+# end of class SqlRobustScaler
+
+# TODO: PowerTransformer and QuantileTransformer
+# BLOCKER: How to get optimized lambda for PowerTransformer through DB query?
+# How to get quantiles of the data efficiently through DB query?
 
 
 
@@ -2159,6 +2395,39 @@ class SqlLabelEncoder (SqlFunction):
 
         return self
 
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlLabelEncoder is the same to sklearn.preprocessing.LabelEncoder
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlLabelEncoder
 
 
@@ -2213,6 +2482,39 @@ class SqlOrdinalEncoder (SqlLabelEncoder):
         sdf.dbconn.execute_command(sql)
 
         return self
+
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlOridnalEncoder is the same to sklearn.preprocessing.OrdinalEncoder
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
 
 # end of class SqlOrdinalEncoder
 
@@ -2296,6 +2598,38 @@ class SqlOneHotEncoder (SqlFunction):
         return self
 
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlOneHotEncoder is the same to sklearn.preprocessing.OneHotEncoder
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlOneHotEncoder
 
 
@@ -2371,6 +2705,38 @@ class SqlLabelBinarizer (SqlFunction):
                 
         return self
 
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlLabelBinarizer is the same to sklearn.preprocessing.LabelBinarizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
 
 # end of class SqlLabelBinarizer    
 
@@ -2502,6 +2868,39 @@ class SqlNormalizer (SqlFunction):
         if (type(sklearn_function) is not sp.Normalizer): raise ValueError("argument is not of type sklearn.preprocessing.Normalizer")
         self.norm = sklearn_function.norm
         return self
+
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlNormalizer is the same to sklearn.preprocessing.Normalizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
 
 # end of class SqlNormalizer 
 
@@ -2698,6 +3097,38 @@ class SqlKernelCenterer (SqlFunction):
         return self
 
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlKernelCenterer is the same to sklearn.preprocessing.KernelCenterer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlKernelCenterer
 
 
@@ -2854,7 +3285,39 @@ class SqlKBinsDiscretizer (SqlFunction):
         return self
 
 
-# end of class SqlLabelBinarizer    
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlKBinsDiscretizer is the same to sklearn.preprocessing.KBinsDiscretizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
+# end of class SqlKBinsDiscretizer  
 
 
 
@@ -2926,6 +3389,38 @@ class SqlSimpleImputer (SqlFunction):
     def load_from_sklearn(self, sklearn_function, sdf, column):            
         return self
 
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlSimpleImputer is the same to sklearn.Imputer.SimpleImputer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
 
 # end of class SqlSimpleImputer  
 
@@ -3051,6 +3546,7 @@ class SqlPipeline():
     def __init__(self, steps, sklearn_steps = []):
         self.steps = steps
         self.sklearn_steps = sklearn_steps
+        self.hybrid_pipeline = True if len(sklearn_steps) > 0 else False #create a hybrid pipeline class inherit from sqlpipeline
 
 
     def __repr__(self):
@@ -3069,23 +3565,23 @@ class SqlPipeline():
 
     def fit(self, x_sdf, y_df=None, **fit_params):
 
+        if len(self.sklearn_steps) > 0:
+            self.hybrid_pipeline = True
+
         #fit sql transformers
-        for step in self.steps[:len(self.steps) - 1]: 
+        preprocessing_steps = self.steps[:len(self.steps)] if self.hybrid_pipeline else self.steps[:len(self.steps) - 1]
+        for step in preprocessing_steps: 
             function = step[1]
             function.fit(x_sdf)
 
         #transform x_sdf to x_df to fit model
         x_sdf = x_sdf.clone()
-        self.transform(x_sdf, skip_final_estimator = True)
+        self.transform(x_sdf, skip_final_estimator = False if self.hybrid_pipeline else True)
         x_df = x_sdf.execute_df(return_df = True)
 
-        # for sklearn steps (after retrieving df)
-        for step in self.sklearn_steps[:len(self.steps) - 1]: 
-            function = step[1]
-            x_df = function.fit_transform(x_df)
-
         #fit final estimator
-        final_estimator = self.steps[len(self.steps) - 1]
+        final_estimator = self.sklearn_steps[len(self.sklearn_steps)-1] if self.hybrid_pipeline else self.steps[len(self.steps)-1]
+
         model = final_estimator[1]
         model.fit(x_df, y_df, **fit_params)
 
@@ -3106,13 +3602,15 @@ class SqlPipeline():
 
     # retrives data from sdf and applies sklearn transformers
     def execute_df(self, x_sdf, return_df = True):
-
         x_df = x_sdf.execute_df(return_df = True)
 
+        if len(self.sklearn_steps) > 0:
+            self.hybrid_pipeline = True
         # apply sklearn transformers if defined
-        for step in self.sklearn_steps[:len(self.steps) - 1]: 
-            function = step[1]
-            x_df = function.transform(x_df)
+        if self.hybrid_pipeline:
+            for step in self.sklearn_steps[:len(self.steps) - 1]: 
+                function = step[1]
+                x_df = function.transform(x_df)
 
         return x_df
 
@@ -3145,15 +3643,145 @@ class SqlPipeline():
 
     def score(self, x_sdf, y_df=None, sample_weight=None):
 
+        if len(self.sklearn_steps) > 0:
+            self.hybrid_pipeline = True
         x_sdf = x_sdf.clone()
-        self.transform(x_sdf, True)
-        x_df = self.execute_df(x_sdf, return_df = True)
+        self.transform(x_sdf, skip_final_estimator = False if self.hybrid_pipeline else True)
+        x_df = x_sdf.execute_df(return_df = True)
 
         score_params = {}
         if sample_weight is not None:
             score_params['sample_weight'] = sample_weight
-        return self.steps[-1][-1].score(x_df, y_df, **score_params)
 
+        if self.hybrid_pipeline:
+            return self.sklearn_steps[-1][-1].score(x_df, y_df, **score_params)
+        else:
+            return self.steps[-1][-1].score(x_df, y_df, **score_params)
+
+
+    comparable_type_dict = {
+            "SqlMinMaxScaler": "MinMaxScaler",
+            "SqlMaxAbsScaler": "MaxAbsScaler",
+            "SqlStandardScaler": "StandardScaler",
+            "SqlBinarizer": "Binarizer",
+            "SqlLabelEncoder": "LabelEncoder",
+            "SqlOrdinalEncoder": "OrdinalEncoder",
+            "SqlOneHotEncoder": "OneHotEncoder",
+            "SqlLabelBinarizer": "LabelBinarizer",
+            "SqlNormalizerr": "Normalizer",
+            "SqlKernelCenterer": "KernelCenterer",        
+            "SqlSimpleImputer": "SimpleImputer",
+            "SqlPipeline": "Pipeline"
+    }
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlKBinsDiscretizer is the same to sklearn.preprocessing.KBinsDiscretizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        return self._compare_pipeline(sklearn_object)
+
+
+    def _compare_pipeline(self, sklearn_object):
+        sqlPipeline_steps = self._get_sqlPipeline_steps()
+        pipeline_steps = self._get_pipeline_steps(sklearn_object)
+
+        if self._is_same_steps(pipeline_steps, sqlPipeline_steps):
+            return True
+        else:
+            return False
+
+    def _is_same_steps(self, pipeline_steps, sqlPipeline_steps):
+
+        for column, steps in pipeline_steps.items():
+            sql_steps = sqlPipeline_steps[column]
+            for i in range(len(steps)):
+                sql_transformer, _ = sql_steps[i]
+                sklearn_transformer, _ = steps[i]
+                if sql_transformer != sklearn_transformer:
+                    return False
+        
+        return True
+
+
+    def _get_pipeline_steps(self, sklearn_object):
+        column_steps = defaultdict(list)
+
+        steps = sklearn_object.named_steps
+        for step in steps:
+            step_type = sklearn_object.named_steps.get(step).__class__.__name__
+            if step_type == 'ColumnTransformer':
+                transformers = steps.get(step).transformers
+                for transformer in transformers:
+                    name, functions, columns = transformer
+                    if isinstance(functions, sklearn.pipeline.Pipeline):
+                        nested_steps = functions.named_steps
+                        for nested_step in nested_steps:
+                            nested_function = nested_steps.get(nested_step)
+                            if len(columns) > 1:
+                                for column in columns:
+                                    column_steps[column].append((nested_function.__class__.__name__, name))
+                            else:
+                                column_steps[columns].append(nested_function.__class__.__name__, name)
+                    else:
+                        if len(columns) > 1:
+                            for column in columns:
+                                column_steps[column].append((functions.__class__.__name__, name))
+                        else:
+                            column_steps[columns[0]].append((functions.__class__.__name__, name))
+            else:
+                # print(f"step is {step}")
+                column_steps['regressor'].append((step_type, step))
+
+        # print(f"sklearn pipeline steps dict : \n {column_steps}")
+        
+        return column_steps
+
+
+    def _get_sqlPipeline_steps(self):
+        column_steps = defaultdict(list)
+        steps = self.steps
+        for step in steps:
+            name, function = step
+            function_name = function.__class__.__name__
+            if isinstance(function, SqlColumnTransformer):
+                transformers = function.transformers
+                for transformer in transformers:
+                    _, sql_function, column = transformer
+                    sql_function_name = sql_function.__class__.__name__
+                    sklearn_function_name = self.comparable_type_dict[sql_function_name]
+                    column_steps[column].append((sklearn_function_name, name))
+            else:
+                # print(f"not SqlColumnTransformer {function_name} {name}")
+                column_steps['regressor'].append((function_name, name))
+
+        # print(f"Sql pipeline steps dict : \n {column_steps}")
+
+        return column_steps
+
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
 
 # end of class SqlPipeline
 
