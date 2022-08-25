@@ -3546,6 +3546,7 @@ class SqlPipeline():
     def __init__(self, steps, sklearn_steps = []):
         self.steps = steps
         self.sklearn_steps = sklearn_steps
+        self.hybrid_pipeline = True if len(sklearn_steps) > 0 else False #create a hybrid pipeline class inherit from sqlpipeline
 
 
     def __repr__(self):
@@ -3564,23 +3565,23 @@ class SqlPipeline():
 
     def fit(self, x_sdf, y_df=None, **fit_params):
 
+        if len(self.sklearn_steps) > 0:
+            self.hybrid_pipeline = True
+
         #fit sql transformers
-        for step in self.steps[:len(self.steps) - 1]: 
+        preprocessing_steps = self.steps[:len(self.steps)] if self.hybrid_pipeline else self.steps[:len(self.steps) - 1]
+        for step in preprocessing_steps: 
             function = step[1]
             function.fit(x_sdf)
 
         #transform x_sdf to x_df to fit model
         x_sdf = x_sdf.clone()
-        self.transform(x_sdf, skip_final_estimator = True)
+        self.transform(x_sdf, skip_final_estimator = False if self.hybrid_pipeline else True)
         x_df = x_sdf.execute_df(return_df = True)
 
-        # for sklearn steps (after retrieving df)
-        for step in self.sklearn_steps[:len(self.steps) - 1]: 
-            function = step[1]
-            x_df = function.fit_transform(x_df)
-
         #fit final estimator
-        final_estimator = self.steps[len(self.steps) - 1]
+        final_estimator = self.sklearn_steps[len(self.sklearn_steps)-1] if self.hybrid_pipeline else self.steps[len(self.steps)-1]
+
         model = final_estimator[1]
         model.fit(x_df, y_df, **fit_params)
 
@@ -3601,13 +3602,15 @@ class SqlPipeline():
 
     # retrives data from sdf and applies sklearn transformers
     def execute_df(self, x_sdf, return_df = True):
-
         x_df = x_sdf.execute_df(return_df = True)
 
+        if len(self.sklearn_steps) > 0:
+            self.hybrid_pipeline = True
         # apply sklearn transformers if defined
-        for step in self.sklearn_steps[:len(self.steps) - 1]: 
-            function = step[1]
-            x_df = function.transform(x_df)
+        if self.hybrid_pipeline:
+            for step in self.sklearn_steps[:len(self.steps) - 1]: 
+                function = step[1]
+                x_df = function.transform(x_df)
 
         return x_df
 
@@ -3640,14 +3643,20 @@ class SqlPipeline():
 
     def score(self, x_sdf, y_df=None, sample_weight=None):
 
+        if len(self.sklearn_steps) > 0:
+            self.hybrid_pipeline = True
         x_sdf = x_sdf.clone()
-        self.transform(x_sdf, True)
-        x_df = self.execute_df(x_sdf, return_df = True)
+        self.transform(x_sdf, skip_final_estimator = False if self.hybrid_pipeline else True)
+        x_df = x_sdf.execute_df(return_df = True)
 
         score_params = {}
         if sample_weight is not None:
             score_params['sample_weight'] = sample_weight
-        return self.steps[-1][-1].score(x_df, y_df, **score_params)
+
+        if self.hybrid_pipeline:
+            return self.sklearn_steps[-1][-1].score(x_df, y_df, **score_params)
+        else:
+            return self.steps[-1][-1].score(x_df, y_df, **score_params)
 
 
     comparable_type_dict = {
