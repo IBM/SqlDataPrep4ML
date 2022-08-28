@@ -15,13 +15,13 @@ Notes
 import sqlalchemy
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 import scipy
 from sklearn_pandas import DataFrameMapper
 import sklearn.preprocessing as sp
 import sklearn.compose
 from enum import Enum
 import joblib
-
 
 
 
@@ -77,6 +77,7 @@ class SqlConnection:
 
 
     def __init__(self, connection_string, print_sql = False):
+        """ init constructor to set values for the different parameters taken as input and establish databse connection """
         self.engine = sqlalchemy.create_engine(connection_string)
         self.print_sql = print_sql
         self.dbtype = SqlConnection.DbType.DB2 if (connection_string[:3].lower() == "db2") else SqlConnection.DbType.STANDARD_SQL
@@ -84,25 +85,93 @@ class SqlConnection:
         
 
     def __repr__(self):
+        """ returns a printable representation of object of class SqlConnection """
         return "SqlConnection(engine=%s, print_sql=%s, dbtype=%s, conn=%s)" % (self.engine, self.print_sql, self.dbtype, self.conn)
 
 
-    def get_sdf(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by):
+    def get_sdf(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs):
         """Creates a new instance of :class:`SqlDataFrame`.
         For description of parameters see documentation of :class:`SqlDataFrame`.
+
+       Parameters 
+       -----------
+        
+        sdf_name : string
+            A unique name of the SqlDataFrame. The name is used to register and manage all related temporary tables.
+            For more information see :class:`SqlDbTableCatalog`.
+
+        sdf_query_data_source : string
+            The FROM clause of SQL statement. This can be either a fully qualified name of table or view, or it can be a SQL statement returning a table.
+            This mechanism allows to nest queries as sources of data for transformations.
+            If the value is not an existing table of view, some dataset related functions will not work correctly.
+
+        dataset_schema : string
+            The schema of of the underlying table.
+
+        dataset_table : string 
+            The name of the underlying table or view.
+
+        key_column : string
+            The name of a column in the dataset holding a unique row key.
+            Some transformation functions require a unique column to function correctly. For more details see descrition of invidual functions.
+        
+        fit_schema : string
+            The schema in which temporary tables created by split and fit functions will be created.
+
+        default_order_by : string
+            Defines the order of rows.
+            It is expressed as the ORDER BY clause of the generated transformation sql statements. 
+            This default value is used if not other order_by argument is specified while invoking SQL generating functions.
+
+        **kwargs : array of key value pairs
+            Addtional arguments used when tables are created.
 
         Returns
         -------
         sdf
             A new instance of :class:`SqlDataFrame`.
-        """
 
-        return SqlDataFrame(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by)
+            """
+
+        return SqlDataFrame(self, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs)
 
 
-    def get_sdf_for_table(self, sdf_name, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None):
+    def get_sdf_for_table(self, sdf_name, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None, **kwargs):
         """Creates a new instance of :class:`SqlDataFrame` for an existing table or a view.
         For description of parameters see documentation of :class:`SqlDataFrame`.
+ 
+       Parameters 
+       -----------
+        
+        sdf_name : string
+            A unique name of the SqlDataFrame. The name is used to register and manage all related temporary tables.
+            For more information see :class:`SqlDbTableCatalog`.
+
+        sdf_query_data_source : string
+            The FROM clause of SQL statement. This can be either a fully qualified name of table or view, or it can be a SQL statement returning a table.
+            This mechanism allows to nest queries as sources of data for transformations.
+            If the value is not an existing table of view, some dataset related functions will not work correctly.
+
+        dataset_schema : string
+            The schema of of the underlying table.
+
+        dataset_table : string 
+            The name of the underlying table or view.
+
+        key_column : string
+            The name of a column in the dataset holding a unique row key.
+            Some transformation functions require a unique column to function correctly. For more details see descrition of invidual functions.
+        
+        fit_schema : string
+            The schema in which temporary tables created by split and fit functions will be created.
+
+        default_order_by : string
+            Defines the order of rows.
+            It is expressed as the ORDER BY clause of the generated transformation sql statements. 
+            This default value is used if not other order_by argument is specified while invoking SQL generating functions.
+
+        **kwargs : array of key value pairs
+            Addtional arguments used when tables are created.
 
         Returns
         -------
@@ -113,24 +182,58 @@ class SqlConnection:
         sdf_query_data_source = dataset_schema + "." + dataset_table
         catalog = catalog if catalog is not None else InMemoryTableCatalog(self, sdf_name, dataset_schema, dataset_table, fit_schema)
 
-        return self.get_sdf(catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by)
+        return self.get_sdf(catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs)
 
 
-    def get_sdf_for_query(self, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None):
+    def get_sdf_for_query(self, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema = None, default_order_by = None, catalog = None, **kwargs):
         """Creates a new instance of :class:`SqlDataFrame` for a SQL query.
         Can be used only in limited cases (such as for nesting of sdfs) because many functions require table as source and not sql.
         For description of parameters see documentation of :class:`SqlDataFrame`.
+
+        Parameters 
+       -----------
+        
+        sdf_name : string
+            A unique name of the SqlDataFrame. The name is used to register and manage all related temporary tables.
+            For more information see :class:`SqlDbTableCatalog`.
+
+        sdf_query_data_source : string
+            The FROM clause of SQL statement. This can be either a fully qualified name of table or view, or it can be a SQL statement returning a table.
+            This mechanism allows to nest queries as sources of data for transformations.
+            If the value is not an existing table of view, some dataset related functions will not work correctly.
+
+        dataset_schema : string
+            The schema of of the underlying table.
+
+        dataset_table : string 
+            The name of the underlying table or view.
+
+        key_column : string
+            The name of a column in the dataset holding a unique row key.
+            Some transformation functions require a unique column to function correctly. For more details see descrition of invidual functions.
+        
+        fit_schema : string
+            The schema in which temporary tables created by split and fit functions will be created.
+
+        default_order_by : string
+            Defines the order of rows.
+            It is expressed as the ORDER BY clause of the generated transformation sql statements. 
+            This default value is used if not other order_by argument is specified while invoking SQL generating functions.
+
+        **kwargs : array of key value pairs
+            Addtional arguments used when tables are created.
 
         Returns
         -------
         sdf
             A new instance of :class:`SqlDataFrame`.
+        
         """
 
         sql_query = "(" + sql_query + ")"
         catalog = catalog if catalog is not None else InMemoryTableCatalog(self, sdf_name, dataset_schema, dataset_table, fit_schema)
         
-        return self.get_sdf(catalog, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema, default_order_by)
+        return self.get_sdf(catalog, sdf_name, sql_query, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs)
 
 
     def print_command(self, sql):
@@ -139,14 +242,14 @@ class SqlConnection:
             Parameters
             ----------
             sql : string
-                The sql to print.
+                The sql statement to print.
         """
         if (self.print_sql):
             print("\n" + sql)
 
 
     def execute_command(self, sql):
-        """Executes SQL statement with not output.
+        """Executes SQL statement with no output.
 
             Parameters
             ----------
@@ -182,7 +285,16 @@ class SqlConnection:
             -------
             row
                 A single result row of type sqlalchemy.engine.RowProxy.
+
+                Refer Documentation
+                -------------------
                 https://docs.sqlalchemy.org/en/13/core/connections.html?highlight=fetchone#sqlalchemy.engine.RowProxy
+
+
+            Exception
+            ----------
+            In case of error "SQL query failed" message printed
+
         """
 
         self.print_command(sql)
@@ -219,7 +331,16 @@ class SqlConnection:
             -------
             cursor
                 A cursor of type sqlalchemy.engine.ResultProxy.
+
+                Refer Documentation
+                -------------------
                 https://docs.sqlalchemy.org/en/13/core/connections.html?highlight=fetchone#sqlalchemy.engine.ResultProxy
+
+
+            Exception
+            ----------
+            In case of error "SQL query failed" message printed
+
         """
 
         self.print_command(sql)
@@ -235,7 +356,7 @@ class SqlConnection:
 
     
     def drop_table (self, schema, table):
-        """Drops table in the database.
+        """Executes SQL query & drops table in the database.
 
             Parameters
             ----------
@@ -277,10 +398,14 @@ class SqlConnection:
             ----------
             sql : string
                 The sql to execute.
+
+            Return
+            ----------
+            A pandas dataframe after execution of the query
         """
 
         self.print_command(sql)
-        return pd.read_sql_query(sql, self.engine)
+        return pd.read_sql_query(sql, self.conn)
 
 
     def get_table_as_df(self, schema, table, order_by=None):
@@ -296,6 +421,12 @@ class SqlConnection:
 
             order_by : string
                 The content of ORDER BY clause of the SQL statement, defining ordering of the rows.
+
+
+            Return
+            -----------
+            A pandas dataframe with the data just retrieved
+
         """
 
         sql = "SELECT * FROM " + schema + "." + table
@@ -307,7 +438,7 @@ class SqlConnection:
 
 
     def table_exists (self, schema, table):
-        """Returns true if table exists.
+        """Function checks if table exists.
 
             Parameters
             ----------
@@ -316,6 +447,10 @@ class SqlConnection:
 
             table : string
                 The name of the table.
+
+            Return
+            ------
+            Returns true if table exists.
         """
 
         if (self.dbtype == SqlConnection.DbType.DB2):
@@ -335,7 +470,7 @@ class SqlConnection:
 
 
     def column_exists (self, schema, table, column):
-        """Returns true if column exists.
+        """Checks if column exists.
 
             Parameters
             ----------
@@ -348,6 +483,9 @@ class SqlConnection:
             column : string
                 The name of the column.
 
+            Return
+            ------
+            Returns true if column exists.
         """
 
         if (self.dbtype == SqlConnection.DbType.DB2):
@@ -367,7 +505,7 @@ class SqlConnection:
 
 
     def get_table_schema (self, schema, table):
-        """Returns <pandas.DataFrame> with a schema (the list of columns with names, datatypes, etc) of the table or view.
+        """To get <pandas.DataFrame> with a schema (the list of columns with names, datatypes, etc) of the table or view.
 
             Parameters
             ----------
@@ -376,6 +514,10 @@ class SqlConnection:
 
             table : string
                 The name of the table.
+
+            Return
+            ------
+            Returns <pandas.DataFrame> with a schema of the table or view.
         """
 
         if (self.dbtype == SqlConnection.DbType.DB2):
@@ -401,12 +543,12 @@ class SqlConnection:
                 The name of the column to add.
         """
 
-        # drop the column if it exists
+        # The condition to drop the column if it exists
         if (self.column_exists(schema, table, column)):
             sql = "ALTER TABLE " + schema + "." + table + " DROP COLUMN " + column
             self.execute_command(sql)
 
-        # add the column
+        # The condition to add the column
         if (self.dbtype == SqlConnection.DbType.DB2):
             sql = "ALTER TABLE " + schema + "." + table + " ADD COLUMN " + column + " INT GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)"
         else:
@@ -435,6 +577,38 @@ class SqlConnection:
 # Class: 
 class TableCatalog:
 
+    """ 
+    It keeps a track of all the tables created during the lifetime of SqlDataFrame 
+
+    Several functions of SqlDataFrame create new temporary tables in the DB such as split or fit functions of some transformers. 
+    To keep track of these, every created table is recorded into the catalog table stored in the DB. 
+
+    To associate tables with a specific SqlDataFrame, each SqlDataFrame has a unique name (SqlDataFrame.sdf_name), 
+    which is recorded into the catalog table along with the new table details.
+
+    In order to keep track of the tables created by a SqlDataFrame derived from an underlying SqlDataFrame,
+    such in case when a new SqlDataFrame represents train table produced by split function from the original SqlDataFrame; 
+    the derived SqlDataFrame uses the same name as the source SqlDataFrame.
+
+    Parameters
+    ----------
+    dbconn : SqlConnection 
+        Connection to DBMS.
+    
+    sdf_name : string
+        The name of the SqlDataFrame under which all tables will be registered.
+
+    dataset_schema : string
+        The schema of the SqlDataFrame under which all tables will be registered.
+
+    dataset_table : string 
+        The table of the SqlDataFrame under which all tables will be registered.
+
+    catalog_schema : string
+        The schema in which the catalog table is stored. 
+        If the table does not exist it will be created when first temporary table is registered.
+
+    """
 
     def __init__(self, dbconn, sdf_name, dataset_schema, dataset_table, fit_schema):
         self.dbconn = dbconn
@@ -493,6 +667,39 @@ class TableCatalog:
 
 # Class: InMemoryTableCatalog
 class InMemoryTableCatalog (TableCatalog):
+    """
+
+    It keeps a track of all the tables created during the lifetime of SqlDataFrame in memory
+
+    Several functions of SqlDataFrame create new temporary tables in the DB such as split or fit functions of some transformers. 
+    To keep track of these, every created table is recorded into the catalog table stored in the DB. 
+
+    To associate tables with a specific SqlDataFrame, each SqlDataFrame has a unique name (SqlDataFrame.sdf_name), 
+    which is recorded into the catalog table along with the new table details.
+
+    In order to keep track of the tables created by a SqlDataFrame derived from an underlying SqlDataFrame,
+    such in case when a new SqlDataFrame represents train table produced by split function from the original SqlDataFrame; 
+    the derived SqlDataFrame uses the same name as the source SqlDataFrame.
+
+    Parameters
+    ----------
+    dbconn : SqlConnection 
+        Connection to DBMS.
+    
+    sdf_name : string
+        The name of the SqlDataFrame under which all tables will be registered.
+
+    dataset_schema : string
+        The schema of the SqlDataFrame under which all tables will be registered.
+
+    dataset_table : string 
+        The table of the SqlDataFrame under which all tables will be registered.
+
+    catalog_schema : string
+        The schema in which the catalog table is stored. 
+        If the table does not exist it will be created when first temporary table is registered.
+
+    """
 
 
     def __init__(self, dbconn, sdf_name, dataset_schema, dataset_table, fit_schema):
@@ -590,6 +797,7 @@ class InDbTableCatalog (TableCatalog):
 
 
     def __init__(self, dbconn, sdf_name, dataset_schema, dataset_table, fit_schema, catalog_schema, **kwargs):
+        
         super(InDbTableCatalog, self).__init__(dbconn, sdf_name, dataset_schema, dataset_table, fit_schema)
         self.catalog_table = self.SDF_TABLE_CATALOG_TABLE
         self.catalog_schema = catalog_schema if catalog_schema is not None else dataset_schema
@@ -602,12 +810,23 @@ class InDbTableCatalog (TableCatalog):
 
     
     def clone(self, sdf_name = None):
+        """Creates copy of the SDF. Copies connection and data source attributes but not transformations.
+
+            Parameters
+            ----------
+            sdf_name : string
+                Name of the new SDF. If not supplied, the name is copied from the orignal SDF.
+
+            Return
+            ------
+            Returns copy of SDF table
+        """
         sdf_name = sdf_name if sdf_name is not None else self.sdf_name
         return InDbTableCatalog(self.dbconn, sdf_name, self.dataset_schema, self.dataset_table, self.fit_schema, self.catalog_schema, **self.kwargs)
 
 
     def create_catalog_table(self):
-
+        """ The function creates a catalog table in a specific database or tablespace"""
         if (not hasattr(self, "catalog_table_exists")):
             self.catalog_table_exists = self.dbconn.table_exists(self.catalog_schema, self.catalog_table)
 
@@ -617,7 +836,6 @@ class InDbTableCatalog (TableCatalog):
             #sql += " (sdf_name VARCHAR(255) NOT NULL, dataset_schema VARCHAR(255) NOT NULL, dataset_table VARCHAR(255) NOT NULL, table_schema VARCHAR(255) NOT NULL, table_name VARCHAR(255) NOT NULL, created TIMESTAMP, PRIMARY KEY (sdf_name, dataset_schema, dataset_table, table_schema, table_name))"
             sql += " (sdf_name VARCHAR(100) NOT NULL, dataset_schema VARCHAR(100) NOT NULL, dataset_table VARCHAR(100) NOT NULL, table_schema VARCHAR(100) NOT NULL, table_name VARCHAR(100) NOT NULL, created TIMESTAMP, PRIMARY KEY (sdf_name, dataset_schema, dataset_table, table_schema, table_name))"
 
-            # create catalog table in specific database or tablespace
             if ((self.dbconn.dbtype == SqlConnection.DbType.DB2) and ('db2_create_catalog_table_in' in self.kwargs)):
                 sql += " " + self.kwargs.get("db2_create_catalog_table_in")
 
@@ -626,11 +844,23 @@ class InDbTableCatalog (TableCatalog):
 
 
     def drop_catalog_table(self):
+        """ Used to drop the catalog table"""
         self.dbconn.drop_table(self.catalog_schema, self.catalog_table)
 
 
     def is_table_registered(self, schema, table):
+        """
+        Checks if table is registered or not
 
+        Parameters
+        ----------
+        schema : string
+        The schema of the table.
+
+        table : string
+        The name of the table.
+
+        """
         self.create_catalog_table()
         
         sql = "SELECT table_schema, table_name FROM " + self.catalog_schema + "." + self.catalog_table 
@@ -641,7 +871,18 @@ class InDbTableCatalog (TableCatalog):
 
 
     def register_table(self, schema, table):
-        
+        """
+        Registers table
+
+        Parameters
+        ----------
+        schema : string
+        The schema of the table.
+
+        table : string
+        The name of the table.
+
+        """
         self.create_catalog_table()
 
         self.un_register_table(schema, table)
@@ -652,7 +893,18 @@ class InDbTableCatalog (TableCatalog):
 
 
     def un_register_table(self, schema, table):
+        """
+        Used to un-register table
 
+        Parameters
+        ----------
+        schema : string
+        The schema of the table.
+
+        table : string
+        The name of the table.
+
+        """
         self.create_catalog_table()
 
         sql = "DELETE FROM " + self.catalog_schema + "." + self.catalog_table
@@ -661,7 +913,16 @@ class InDbTableCatalog (TableCatalog):
         
 
     def get_list_of_tables(self, include_all_sdfs = False):
+        """ Give a list of all tables in sdf
 
+        Parameters
+        ----------
+        include_all_sdfs: boolean
+        variable stores true if all tables from sdf included
+        
+        Return
+        ------
+        Returns the list of tables after executing the query"""
         self.create_catalog_table()
         
         sql = "SELECT * FROM " + self.catalog_schema + "." + self.catalog_table 
@@ -673,7 +934,8 @@ class InDbTableCatalog (TableCatalog):
 
 
     def drop_temporary_tables(self):
-
+        """ Used to drop tables which were temporary 
+        """
         self.create_catalog_table()
         
         sql = "SELECT table_schema, table_name FROM " + self.catalog_schema + "." + self.catalog_table 
@@ -805,7 +1067,7 @@ class SqlDataFrame:
 
 
 
-    def __init__(self, dbconn, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by):
+    def __init__(self, dbconn, catalog, sdf_name, sdf_query_data_source, dataset_schema, dataset_table, key_column, fit_schema, default_order_by, **kwargs):
         self.dbconn = dbconn
         self.catalog = catalog
         self.sdf_name = sdf_name
@@ -813,14 +1075,15 @@ class SqlDataFrame:
         self.dataset_schema = dataset_schema
         self.dataset_table = dataset_table
         self.key_column = key_column
-        self.fit_schema = fit_schema
+        self.fit_schema = fit_schema if fit_schema is not None else dataset_schema
         self.default_order_by = default_order_by
+        self.kwargs = kwargs
         
         self.transformations = []
 
 
     def __repr__(self):
-        return "SqlDataFrame(\ndbconn=%s,\ncatalog=%s,\nsdf_name=%s,\nsdf_query_data_source=%s,\ndataset_schema=%s,\ndataset_table=%s,\nkey_column=%s,\nfit_schema=%s,\ndefault_order_by=%s,\ntransformations=%s)" % (self.dbconn, \
+        return "SqlDataFrame(\ndbconn=%s,\ncatalog=%s,\nsdf_name=%s,\nsdf_query_data_source=%s,\ndataset_schema=%s,\ndataset_table=%s,\nkey_column=%s,\nfit_schema=%s,\ndefault_order_by=%s,\nkwargs=%s,\ntransformations=%s)" % (self.dbconn, \
             self.catalog, \
             self.sdf_name, \
             self.sdf_query_data_source, \
@@ -829,6 +1092,7 @@ class SqlDataFrame:
             self.key_column, \
             self.fit_schema, \
             self.default_order_by,
+            self.kwargs,
             self.transformations)
 
 
@@ -839,12 +1103,16 @@ class SqlDataFrame:
             ----------
             sdf_name : string
                 Name of the new SDF. If not supplied, the name is copied from the orignal SDF.
+
+            Return
+            ------
+            Returns a copy of SDF 
         """
 
         sdf_name = sdf_name if (sdf_name is not None) else self.sdf_name
         catalog = self.catalog.clone(sdf_name)
         
-        return SqlDataFrame(self.dbconn, catalog, sdf_name, self.sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by)
+        return SqlDataFrame(self.dbconn, catalog, sdf_name, self.sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by, **self.kwargs)
 
 
     # creates copy of the sdf, with the transform sql of this sdf as a data source in the new sdf
@@ -873,13 +1141,17 @@ class SqlDataFrame:
 
                 Note: ordering should be used only when needed for testing purposes. It carries performance penalty.
 
+            Return
+            ------
+            Returns copy of SDF
+
         """
         
         sdf_name = sdf_name if (sdf_name is not None) else self.sdf_name
         catalog = self.catalog.clone(sdf_name)
         sdf_query_data_source =  '(' + self.generate_sql(include_source_columns, limit, include_all_source_columns, order_by) + ')'
 
-        return SqlDataFrame(self.dbconn, catalog, sdf_name, sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by)
+        return SqlDataFrame(self.dbconn, catalog, sdf_name, sdf_query_data_source, self.dataset_schema, self.dataset_table, self.key_column, self.fit_schema, self.default_order_by, **self.kwargs)
 
 
     def add_column_to_output(self, source_column, target_column):
@@ -943,7 +1215,7 @@ class SqlDataFrame:
         """
 
         for i in range(len(source_columns)):
-            self.transformations.append(self.Transformation(source_columns[i], target_columns[i], column_functions[i], None), sub_table if i == 0 else None)
+            self.transformations.append(self.Transformation(source_columns[i], target_columns[i], column_functions[i], None, sub_table if i == 0 else None))
 
 
     def generate_sql (self, \
@@ -958,7 +1230,7 @@ class SqlDataFrame:
             Parameters
             ----------
             include_source_columns : bool
-                If True, fFor each transformed column add the source column into output.
+                If True, for each transformed column add the source column into output.
 
             limit : int
                 The number of output rows. If None, all rows are included.
@@ -1050,7 +1322,21 @@ class SqlDataFrame:
 
 
     def __execute_sql_to_df(self, sql, return_df):
+        """
+        To convert dataframe to numpy array
 
+        Parameters
+        ----------
+        sql : string
+        The sql to execute.
+
+        return_df : bool
+        If True, returns pandas.DataFrame, otherwise numpy.array.
+
+        Return
+        -------
+        Returns numpy array converted from the input dataframe
+        """
         df = self.dbconn.execute_sql_to_df(sql)
 
         if (return_df):
@@ -1072,7 +1358,7 @@ class SqlDataFrame:
                 If True, returns pandas.DataFrame, otherwise numpy.array.
 
             include_source_columns : bool
-                If True, fFor each transformed column add the source column into output.
+                If True, for each transformed column add the source column into output.
 
             order_by : string
                 Defines the order of rows.
@@ -1080,6 +1366,10 @@ class SqlDataFrame:
                 If provided, overides the default_order_by.
 
                 Note: ordering should be used only when needed for testing purposes. It carries performance penalty.
+
+        Return
+        ------
+        Returns first n rows after executing the SQL statement
                 
         """
 
@@ -1121,7 +1411,7 @@ class SqlDataFrame:
 
 
     def get_table_size(self):
-        """Returns the number of riws in the underlying dataset.
+        """Returns the number of rows in the underlying dataset.
         """
 
         sql = 'SELECT COUNT(*) FROM ' + self.sdf_query_data_source
@@ -1130,6 +1420,7 @@ class SqlDataFrame:
 
 
     def shape(self):
+        """Returns the dimensions of the table"""
         return (self.get_table_size(), self.info().shape[0])
 
 
@@ -1184,6 +1475,27 @@ class SqlDataFrame:
 
 
     def __generate_sample_sql(self, n = 0, frac = 0, random_state = 0):
+        """ 
+        To create sample sql query
+
+            Parameters
+            ----------
+            return_df : bool
+                If True, returns pandas.DataFrame, otherwise numpy.array.
+
+            n : int
+                Number of items to return. Cannot be used with frac.
+
+            frac : float
+                Fraction of axis items to return. Cannot be used with n.
+            
+            random_state : int, optional
+                Seed for the random number generator.
+
+            Return
+            ------
+            Returns sample sql query
+        """
         assert(not(n == 0 and frac == 0))
         assert(n == 0 or frac == 0)
         assert(frac >= 0 and frac <= 1)
@@ -1282,7 +1594,7 @@ class SqlDataFrame:
             Parameters
             ----------
             column : string
-                If provided, the colum is created and key_column is set the new balue.
+                If provided, the colum is created and key_column is set the new value.
                 If not provided, the SDF.key_column is used.
         """
 
@@ -1345,6 +1657,10 @@ class SqlDataFrame:
                 If provided, overides the default_order_by.
 
                 Note: ordering should be used only when needed for testing purposes. It carries performance penalty.
+
+            Return
+            ------
+            Returns columns from the dataset input
                 
         """
 
@@ -1357,7 +1673,7 @@ class SqlDataFrame:
 
 
     def get_y_df(self, column, limit = None, return_df = False, order_by = None):
-        """Returns y from the underlying dataset e.g.: for model scoring
+        """Gives values on y axis from the underlying dataset e.g.: for model scoring
         
             Parameters
             ----------
@@ -1376,6 +1692,12 @@ class SqlDataFrame:
                 If provided, overides the default_order_by.
 
                 Note: ordering should be used only when needed for testing purposes. It carries performance penalty.
+
+
+            Return
+            ------
+            Returns y from the underlying dataset
+
         """
 
         return self.get_table_column_df(column, limit, return_df, order_by)
@@ -1466,6 +1788,7 @@ class SqlDataFrame:
 
         if (y_column is not None):
             # returns X_train, X_test, y_train, y_test 
+
             y_train_df = train_sdf.get_y_df(y_column)
             y_test_df = test_sdf.get_y_df(y_column)
 
@@ -1534,12 +1857,27 @@ class SqlDataFrame:
 
 
 # Class: SklearnToSqlConverter
-# Converts sklearn transformers, pipelines and mappers into to corresponding Sql library objects
-class SklearnToSqlConverter:
 
+class SklearnToSqlConverter:
+    """ Converts sklearn transformers, pipelines and mappers into to corresponding Sql library objects 
+    
+    Parameters
+    ----------
+
+    sdf - instance of SqlDataFrame 
+    columns - the columns in data to be converted
+
+
+    """
     @classmethod
     def convert_function(cls, sklearn_function, sdf = None, columns = None):
-        
+        """   
+        For conversion of sklearn function to sql function
+
+        Return
+        ------
+        Returns sql function equivalent to sklearn function
+        """
         sklearn_type = type(sklearn_function) 
         sql_function = None
 
@@ -1560,6 +1898,15 @@ class SklearnToSqlConverter:
 
     @classmethod
     def convert_dataframemapper(cls, sdf, dataframemapper):
+        """
+
+        Parameters
+        ----------
+        sdf - instance of SqlDataFrame 
+
+
+    
+        """
 
         sql_features = []
 
@@ -1586,40 +1933,67 @@ class SklearnToSqlConverter:
 
 
 
-# Class: SQL Function - Base class for all data preparation functions
+
 class SqlFunction:
-
-    #def __init__(self):
-
-    #def __repr__(self):
-
-    # sdf - instance of SqlDataFrame 
-    # column - the column holding the data to fit
+    """
+    Base class for all data preparation functions
+    """
+ 
     def fit(self, sdf, column):
+        """
+
+        Parameters
+        ----------
+        sdf - instance of SqlDataFrame 
+        column - the column holding the data to fit
+
+
+        """
         print("not to be used")
 
 
-    # returns a string to attach at the end of a fit table name to distinguish the type of function applied at the column
     def get_fit_table_suffix(self):
+        """
+        returns a string to attach at the end of a fit table name to distinguish the type of function applied at the column
+        """
         print("not to be used")
 
 
-    # sdf - instance of SqlDataFrame 
-    # column - the column to be transformed
+
     def transform(self, sdf, columns):
+        """
+        Parameters
+        ----------
+        sdf - instance of SqlDataFrame 
+        columns - the columns to be transformed
+        """
         print("not to be used")
 
 
     def fit_transform(self, sdf, columns):
+        """
+
+        Parameters
+        ----------
+        sdf - instance of SqlDataFrame 
+        columns - the columns holding the data to transform
+        """
         self.fit(sdf, columns)
         return self.transform(sdf, columns)
 
 
-    # Loads its Fit state from an instance of the corresponding sklearn function
-    # sklearn_function - instance of sklearn_function to load fit data from
-    # sdf - the sdf with db connection and attributes (fit schema, etc) which will be used to store fit data into db
-    # columns - columns for which the fit data should be stored
+
     def load_from_sklearn(self, sklearn_function, sdf, columns):
+        """
+            Loads its Fit state from an instance of the corresponding sklearn function
+
+            Parameters
+            ----------
+
+            sklearn_function - instance of sklearn_function to load fit data from
+            sdf - the sdf with db connection and attributes (fit schema, etc) which will be used to store fit data into db
+            columns - columns for which the fit data should be stored
+        """
         print("not to be used")
 
 
@@ -1629,9 +2003,17 @@ class SqlFunction:
 
 
 # Class SqlPassthroughColumn
-# Includes in output table a column from the source table
-class SqlPassthroughColumn (SqlFunction):
 
+class SqlPassthroughColumn (SqlFunction):
+    """Includes in output table a column from the source table
+
+    Parameters
+    ----------
+
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+    """
     def __init__(self, target_column = None):
         self.target_column = target_column
 
@@ -1653,14 +2035,22 @@ class SqlPassthroughColumn (SqlFunction):
 
 
 # Class SqlUDFTransformer
-# Invokes internal UDF function of the underlying database platform
+
 class SqlUDFTransformer (SqlFunction):
 
+    """
+    Invokes internal UDF function of the underlying database platform
 
-    # arguments if init
-    # udf - the name of udf in database
-    # arguments - a list of arguments used to invoke the udf, the list must contain a string "{column}"" which will be replaced with the name of the actual column
-    #   if arguments is None, the column will be the first and only argument
+    Parameters
+    ----------
+    udf - the name of udf in database
+    arguments - a list of arguments used to invoke the udf, the list must contain a string "{column}"" which will be replaced with the name of the actual column
+    if arguments is None, the column will be the first and only argument
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+
+    """
 
     def __init__(self, udf, arguments = None, target_column = None):
         self.udf = udf
@@ -1698,14 +2088,19 @@ class SqlUDFTransformer (SqlFunction):
 
 
 # Class SqlCustomSqlTransformer
-# Allows to define and execute custom sql transformation on a column
+
 class SqlCustomSqlTransformer (SqlFunction):
-
-
-    # arguments if init
-    # udf - the name of udf in database
-    # custom_transformation - sql string used to transform the source table column, the string must contain a string "{column}" which will be replaced with the name of the actual column
-
+    """
+    Allows to define and execute custom sql transformation on a column
+    
+    Parameters
+    -----------
+    udf - the name of udf in database
+    custom_transformation - sql string used to transform the source table column, the string must contain a string "{column}" which will be replaced with the name of the actual column
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+    """
     def __init__(self, custom_transformation, target_column = None):
         self.custom_transformation = custom_transformation
         self.target_column = target_column
@@ -1739,14 +2134,20 @@ class SqlCustomSqlTransformer (SqlFunction):
 
 
 # Class SqlCaseEncoder
-# Allows to define specific cases - uses a pairs of conditions and values to determine new value of the column
 class SqlCaseEncoder (SqlFunction):
+    """
+    Allows to define specific cases - uses a pairs of conditions and values to determine new value of the column
+    self.cases [condition, value]
 
+    Parameters
+    ----------
+    cases - an array of CASE conditions and values 
+    else_value - value used when no other options fit
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+    """
 
-    # self.cases [condition, value]
-
-    # cases - an array of CASE conditions and values 
-    # else_value - value used when no other options fit
     def __init__(self, cases, else_value = None, target_column = None):
         assert(cases is not None and len(cases) > 0)
 
@@ -1792,14 +2193,20 @@ class SqlCaseEncoder (SqlFunction):
 
 
 # Class SqlMapEncoder
-# Maps keys to values 
+
 class SqlMapEncoder (SqlFunction):
+    """
+    Maps keys to values 
+    self.pairs [key, value]
 
-
-    # self.pairs [key, value]
-
-    # pairs - an array of key value pairs
-    # else_value - value used when no other options fit
+    Parameters
+    ----------
+    pairs - an array of key value pairs
+    else_value - value used when no other options fit
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+    """
     def __init__(self, pairs, else_value = None, target_column = None):
         assert(pairs is not None and len(pairs) > 0)
 
@@ -1846,14 +2253,32 @@ class SqlMapEncoder (SqlFunction):
 
 
 # Class: MinMaxScaler
-# MinMax scaling - range 0 to 1
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html#sklearn.preprocessing.MinMaxScaler
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
-# X_std = (X - X.min(axis=0)) / (X.max(axis=0) - X.min(axis=0))
-# fit - Compute the minimum and maximum to be used for later scaling.
-# transform - Scaling features of X according to feature_range.
+
 class SqlMinMaxScaler (SqlFunction):
 
+    """
+    MinMax scaling - range 0 to 1
+
+    Access Documentation
+    ---------------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html#sklearn.preprocessing.MinMaxScaler
+
+    Access Source Code
+    ---------------------
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
+
+
+    X_std = (X - X.min(axis=0)) / (X.max(axis=0) - X.min(axis=0))
+
+    Parameters
+    ----------
+    fit - Compute the minimum and maximum to be used for later scaling.
+    transform - Scaling features of X according to feature_range.
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+
+    """
 
     def __init__(self, target_column = None):
         self.target_column = target_column
@@ -1888,6 +2313,36 @@ class SqlMinMaxScaler (SqlFunction):
         self.max_value = sklearn_function.data_max_[0]
         return self
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlMinMaxScaler is the same to sklearn.preprocessing.MinMaxScaler
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
 
 # end of class SqlMinMaxScaler
 
@@ -1899,14 +2354,27 @@ class SqlMinMaxScaler (SqlFunction):
 
 
 # Class: MaxAbsScaler
-# MaxAbs scaling - range 0 to 1
-# Scale each feature by its maximum absolute value.
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MaxAbsScaler.html#sklearn.preprocessing.MaxAbsScaler
-# Unlike min max this estimator does not consider min value but only max
-# fit - Compute the minimum and maximum to be used for later scaling.
-# transform - Scaling features of X according to feature_range.
-class SqlMaxAbsScaler (SqlFunction):
 
+class SqlMaxAbsScaler (SqlFunction):
+    """
+    MaxAbs scaling - range 0 to 1
+    Scale each feature by its maximum absolute value.
+
+    Documentation
+    ----------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MaxAbsScaler.html#sklearn.preprocessing.MaxAbsScaler 
+
+    Unlike min max this estimator does not consider min value but only max
+
+    Parameters
+    ----------
+    fit - Compute the minimum and maximum to be used for later scaling.
+    transform - Scaling features of X according to feature_range.
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+
+    """
 
     def __init__(self, target_column = None):
         self.target_column = target_column
@@ -1940,6 +2408,39 @@ class SqlMaxAbsScaler (SqlFunction):
         return self
 
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlMaxAbsScaler is the same to sklearn.preprocessing.MaxAbsScaler
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlMaxAbsScaler
 
 
@@ -1947,14 +2448,31 @@ class SqlMaxAbsScaler (SqlFunction):
 
 
 # Class: Binarizer
-# Binarize data (set feature values to 0 or 1) according to a threshold
-# Values greater than the threshold map to 1, while values less than or equal to the threshold map to 0.
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.Binarizer.html
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
-# fit - Do nothing
-# transform - Binarize each element of X
-class SqlBinarizer (SqlFunction):
 
+class SqlBinarizer (SqlFunction):
+    """
+
+    Binarize data (set feature values to 0 or 1) according to a threshold
+    Values greater than the threshold map to 1, while values less than or equal to the threshold map to 0.
+
+    Access Documentation
+    ----------------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.Binarizer.html 
+
+    Access Source code
+    -----------------------
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
+
+
+    Parameters
+    ----------
+    fit - Do nothing
+    transform - Binarize each element of X
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+
+    """
 
     def __init__(self, threshold=0.0, target_column = None):
         self.threshold = threshold
@@ -1984,6 +2502,40 @@ class SqlBinarizer (SqlFunction):
         self.threshold = sklearn_function.threshold
         return self
 
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlBinarizer is the same to sklearn.preprocessing.Binarizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sql_object, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = sql_object.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlBinarizer
 
 
@@ -1992,20 +2544,31 @@ class SqlBinarizer (SqlFunction):
 
 
 # Class: StandardScaler
-# Standardize features by removing the mean and scaling to unit variance
-"""
--- The standard score of a sample x is calculated as:
--- z = (x - u) / s
--- where u is the mean of the training samples
--- and s is the standard deviation of the training samples
--- The results of this function differ depending on implementation of stddev which is tech/platform/lib dependent
--- - therefore comparizon of results between different libraries must do some degree of rounding to match outcomes
-"""
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html#sklearn.preprocessing.StandardScaler
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
-# fit - Compute the mean and std to be used for later scaling.
-# transform - Perform standardization by centering and scaling
+
 class SqlStandardScaler (SqlFunction):
+
+    """
+    Standardize features by removing the mean and scaling to unit variance
+    -- The standard score of a sample x is calculated as:
+    -- z = (x - u) / s
+    -- where u is the mean of the training samples
+    -- and s is the standard deviation of the training samples
+    -- The results of this function differ depending on implementation of stddev which is tech/platform/lib dependent
+    -- - therefore comparizon of results between different libraries must do some degree of rounding to match outcomes
+
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html#sklearn.preprocessing.StandardScaler
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
+
+    Parameters
+    ----------
+
+    fit - Compute the mean and std to be used for later scaling.
+    transform - Perform standardization by centering and scaling
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+
+    """
 
 
     def __init__(self, target_column = None):
@@ -2042,6 +2605,39 @@ class SqlStandardScaler (SqlFunction):
         self.stddev_value = sklearn_function.scale_[0]
         return self
 
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlStandardScaler is the same to sklearn.preprocessing.StandardScaler
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(self, sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlStandardScaler
 
 
@@ -2050,16 +2646,27 @@ class SqlStandardScaler (SqlFunction):
 
 
 # Class: LabelEncoder
-# Encode labels with value between 0 and n_classes-1.
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.LabelEncoder.html#sklearn.preprocessing.LabelEncoder
-# Fit - Fit label encoder - generates codes/indexes of labels
-# transform - Transform labels to normalized encoding.
 
-# The result of Fit function is stored in table in the same DB as the original table is located at
-# This can be implemented as storing to any other destination
 
 class SqlLabelEncoder (SqlFunction):
+    """
+    Encode labels with value between 0 and n_classes-1.
 
+    Documentation
+    -------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.LabelEncoder.html#sklearn.preprocessing.LabelEncoder
+
+    Parameters
+    ----------
+    Fit - Fit label encoder - generates codes/indexes of labels
+    transform - Transform labels to normalized encoding.
+    sdf - instance of SqlDataFrame
+    column - the column holding the data to fit
+    columns - columns for which the fit data should be stored & transformed
+
+    The result of Fit function is stored in table in the same DB as the original table is located at
+    This can be implemented as storing to any other destination
+    """
 
     def __init__(self, target_column = None):
         self.target_column = target_column
@@ -2159,6 +2766,39 @@ class SqlLabelEncoder (SqlFunction):
 
         return self
 
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlLabelEncoder is the same to sklearn.preprocessing.LabelEncoder
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlLabelEncoder
 
 
@@ -2168,10 +2808,18 @@ class SqlLabelEncoder (SqlFunction):
 
 
 # Class: OrdinalEncoder
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OrdinalEncoder.html#sklearn.preprocessing.OrdinalEncoder
-# Encode categorical features as an integer array.
-# Reuses almost all functionality of SqlLabelEncoder
+
 class SqlOrdinalEncoder (SqlLabelEncoder):
+    """
+    Encode categorical features as an integer array.
+    Reuses almost all functionality of SqlLabelEncoder
+
+    Documentation
+    -------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OrdinalEncoder.html#sklearn.preprocessing.OrdinalEncoder
+
+
+    """
 
 
     def __init__(self, target_column = None):
@@ -2214,6 +2862,39 @@ class SqlOrdinalEncoder (SqlLabelEncoder):
 
         return self
 
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlOridnalEncoder is the same to sklearn.preprocessing.OrdinalEncoder
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlOrdinalEncoder
 
 
@@ -2223,12 +2904,31 @@ class SqlOrdinalEncoder (SqlLabelEncoder):
 
 
 # Class: OneHotEncoder
-# Encode categorical integer features as a one-hot numeric array.
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html#sklearn.preprocessing.OneHotEncoder
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_encoders.py
+
 
 class SqlOneHotEncoder (SqlFunction):
+    """
+    Encode categorical integer features as a one-hot numeric array.
 
+    The input to this transformer should be an array-like of integers or strings, denoting the values taken on by categorical (discrete) features. 
+    The features are encoded using a one-hot (aka ‘one-of-K’ or ‘dummy’) encoding scheme. This creates a binary column for each category and returns 
+    a sparse matrix or dense array (depending on the sparse parameter)
+
+    By default, the encoder derives the categories based on the unique values in each feature. Alternatively, you can also specify the categories manually.
+
+    This encoding is needed for feeding categorical data to many scikit-learn estimators, notably linear models and SVMs with the standard kernels.
+
+
+    Access full documentation 
+    --------------------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html#sklearn.preprocessing.OneHotEncoder
+
+
+    Access source code
+    --------------------------
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_encoders.py
+
+    """
 
     def __init__(self, target_column = None):
         self.target_column = target_column
@@ -2239,8 +2939,8 @@ class SqlOneHotEncoder (SqlFunction):
 
 
     def fit(self, sdf, column):
+        """generate list of columns sql"""
 
-        # generate list of columns sql
         self.categories = []
 
         sql = "SELECT DISTINCT TRIM(CAST(" + column + " AS VARCHAR(255))) AS label_code FROM " + sdf.sdf_query_data_source + " AS data_table WHERE " + column + " IS NOT NULL ORDER BY TRIM(CAST(" + column + " AS VARCHAR(255)))"
@@ -2254,6 +2954,7 @@ class SqlOneHotEncoder (SqlFunction):
 
 
     def are_all_categories_number(self):
+        """ check if all categories are numbers or not"""
         try:
             for category in self.categories:
                 complex(category)
@@ -2264,7 +2965,7 @@ class SqlOneHotEncoder (SqlFunction):
 
 
     def generate_columns_sql(self, column):
-        
+        """ return columns with modified names """
         columns = ""
         are_all_categories_number = self.are_all_categories_number()
 
@@ -2277,12 +2978,27 @@ class SqlOneHotEncoder (SqlFunction):
 
 
     def transform(self, sdf, columns):
+        """ 
+        Transform columns using one-hot encoding.
+        If there are infrequent categories for a feature, the infrequent
+        categories will be grouped into a single category.
+
+        Parameters
+        ----------
+        columns : array-like of shape (n_samples, n_features)
+            The data to encode.
+        Returns
+        -------
+            Transformed input. If `sparse=True`, a sparse matrix will be
+            returned.
+        """
         column = columns if (not isinstance(columns, list)) else columns[0]
         columns = self.generate_columns_sql(column)
         sdf.add_single_column_transformation(column, None, columns, None)
 
 
     def load_from_sklearn(self, sklearn_function, sdf, column):
+        """  """
         if (type(sklearn_function) is not sp.OneHotEncoder): raise ValueError("argument is not of type sklearn.preprocessing.OneHotEncoder")
         
         self.categories = []
@@ -2296,6 +3012,40 @@ class SqlOneHotEncoder (SqlFunction):
         return self
 
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlOneHotEncoder is the same to sklearn.preprocessing.OneHotEncoder
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        """ function to check comparison between two arguments
+            return true if they are same
+        """
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlOneHotEncoder
 
 
@@ -2305,10 +3055,29 @@ class SqlOneHotEncoder (SqlFunction):
 
 
 # Class: LabelBinarizer
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.LabelBinarizer.html#sklearn.preprocessing.LabelBinarizer
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_label.py
-class SqlLabelBinarizer (SqlFunction):
 
+class SqlLabelBinarizer (SqlFunction):
+    """
+    Binarize labels in a one-vs-all fashion.
+
+    Several regression and binary classification algorithms are available in scikit-learn. A simple way to extend these algorithms to the multi-class classification 
+    case is to use the so-called one-vs-all scheme.
+
+    At learning time, this simply consists in learning one regressor or binary classifier per class. In doing so, one needs to convert multi-class labels to binary 
+    labels (belong or does not belong to the class). LabelBinarizer makes this process easy with the transform method.
+
+    At prediction time, one assigns the class for which the corresponding model gave the greatest confidence. LabelBinarizer makes this easy with the inverse_transform method.
+
+
+    Access full documentation
+    ---------------------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.LabelBinarizer.html#sklearn.preprocessing.LabelBinarizer
+
+    Access Source code
+    ---------------------------
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_label.py
+
+    """
 
     def __init__(self, target_column = None):
         self.target_column = target_column
@@ -2320,7 +3089,17 @@ class SqlLabelBinarizer (SqlFunction):
 
     def fit(self, sdf, column):
 
-        # generate list of columns sql
+        """ generate list of columns sql 
+        Fit label binarizer.
+        Parameters
+        ----------
+        column : ndarray of shape (n_samples,) or (n_samples, n_classes)
+            Target values. The 2-d matrix should only contain 0 and 1,
+            represents multilabel classification.
+        Returns
+        -------
+        self : object
+            Returns the instance itself."""
         self.classes = []
 
         sql = "SELECT DISTINCT " + column + " AS label_code FROM " + sdf.sdf_query_data_source + " AS data_table ORDER BY " + column 
@@ -2336,9 +3115,10 @@ class SqlLabelBinarizer (SqlFunction):
 
     def generate_columns_sql(self, column):
         
-        # sklearn - special case - if number of columns is 2, the result is a single column i.e. binary values
-        # in this respect the label binarizer differs from 1hot encoder
-        # - the single column is the second one based on string order of labels
+        """sklearn - special case - if number of columns is 2, the result is a single column i.e. binary values
+        in this respect the label binarizer differs from 1hot encoder
+        - the single column is the second one based on string order of labels """
+        
         if (len(self.classes) == 2): 
             target_columns = self.get_sql_for_label(column, self.classes[1])
         else:
@@ -2358,6 +3138,23 @@ class SqlLabelBinarizer (SqlFunction):
 
 
     def transform(self, sdf, columns):
+        """
+        Transform multi-class labels to binary labels.
+        The output of transform is sometimes referred to by some authors as
+        the 1-of-K coding scheme.
+        Parameters
+        ----------
+        columns : {array, sparse matrix} of shape (n_samples,) or \
+                (n_samples, n_classes)
+            Target values. The 2-d matrix should only contain 0 and 1,
+            represents multilabel classification. Sparse matrix can be
+            CSR, CSC, COO, DOK, or LIL.
+        Returns
+        -------
+        target_columns : {ndarray, sparse matrix} of shape (n_samples, n_classes)
+            Shape will be (n_samples, 1) for binary problems. Sparse matrix
+            will be of CSR format.
+        """
         column = columns if (not isinstance(columns, list)) else columns[0]
         target_columns = self.generate_columns_sql(column)
         sdf.add_single_column_transformation(column, None, target_columns, None)
@@ -2372,6 +3169,38 @@ class SqlLabelBinarizer (SqlFunction):
         return self
 
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlLabelBinarizer is the same to sklearn.preprocessing.LabelBinarizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlLabelBinarizer    
 
 
@@ -2381,12 +3210,69 @@ class SqlLabelBinarizer (SqlFunction):
 
 
 # Class: Normalizer 
-# Normalize samples individually to unit norm.
-# Sql implimentationsupports all three norms (l1, l2, max)
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.Normalizer.html#sklearn.preprocessing.Normalizer
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/utils/extmath.py
+
 class SqlNormalizer (SqlFunction):
+
+    """
+    Normalize samples individually to unit norm.
+    Each sample (i.e. each row of the data matrix) with at least one
+    non zero component is rescaled independently of other samples so
+    that its norm (l1, l2 or inf) equals one.
+    This transformer is able to work both with dense numpy arrays and
+    scipy.sparse matrix (use CSR format if you want to avoid the burden of
+    a copy / conversion).
+    Scaling inputs to unit norms is a common operation for text
+    classification or clustering for instance. For instance the dot
+    product of two l2-normalized TF-IDF vectors is the cosine similarity
+    of the vectors and is the base similarity metric for the Vector
+    Space Model commonly used by the Information Retrieval community.
+
+    Parameters
+    ----------
+    norm : {'l1', 'l2', 'max'}, default='l2'
+        The norm to use to normalize each non zero sample. If norm='max'
+        is used, values will be rescaled by the maximum of the absolute
+        values.
+    copy : bool, default=True
+        Set to False to perform inplace row normalization and avoid a
+        copy (if the input is already a numpy array or a scipy.sparse
+        CSR matrix).
+
+        
+
+    Access Documentation
+    ----------------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.Normalizer.html#sklearn.preprocessing.Normalizer 
+
+
+    Access Source Code
+    ---------------------
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
+
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/utils/extmath.py
+
+
+
+    Notes
+    -----
+    This estimator is stateless (besides constructor parameters), the
+    fit method does nothing but is useful when used in a pipeline.
+    
+     Examples
+    --------
+     from sklearn.preprocessing import Normalizer
+     X = [[4, 1, 2, 2],
+          [1, 3, 9, 3],
+         [5, 7, 5, 1]]
+     transformer = Normalizer().fit(X)  # fit does nothing.
+     transformer
+    Normalizer()
+     transformer.transform(X)
+    array([[0.8, 0.2, 0.4, 0.4],
+           [0.1, 0.3, 0.9, 0.3],
+           [0.5, 0.7, 0.5, 0.1]])
+
+    """
 
     def __init__(self, norm='l2', copy=True, target_column = None):
         self.norm = norm
@@ -2472,6 +3358,19 @@ class SqlNormalizer (SqlFunction):
 
 
     def transform(self, sdf, columns):
+        """
+        Scale each non zero row of X to unit norm.
+        Parameters
+        ----------
+        columns : {array-like, sparse matrix} of shape (n_samples, n_features)
+            The data to normalize, row by row. scipy.sparse matrices should be
+            in CSR format to avoid an un-necessary copy.
+        
+        Returns
+        -------
+        target_columns : {ndarray, sparse matrix} of shape (n_samples, n_features)
+            Transformed array.
+        """
 
         key = sdf.key_column
         sdf_query_data_source = sdf.sdf_query_data_source
@@ -2503,95 +3402,65 @@ class SqlNormalizer (SqlFunction):
         self.norm = sklearn_function.norm
         return self
 
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlNormalizer is the same to sklearn.preprocessing.Normalizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlNormalizer 
 
 
 
 
-'''
-l2 form / normalize row
-select 
-c1 / row_norm as c1, 
-c2 / row_norm as c2, 
-c3 / row_norm as c3 
-from
-(
-	select *, ROW_NUMBER() OVER (ORDER BY (SELECT 100)) row_index 
-	from s1.kc1
-) as source_matrix,
-(
-	select sqrt(c1 * c1 + c2 * c2 + c3 * c3) as row_norm,
-		ROW_NUMBER() OVER (ORDER BY (SELECT 100)) row_index 
-	from s1.kc1
-) as norms
-where source_matrix.row_index = norms.row_index
-
-l1
-select 
-c1 / row_norm as c1, 
-c2 / row_norm as c2, 
-c3 / row_norm as c3 
-from
-(
-	select cast(c1 as float) as c1,
-		cast(c2 as float) as c2,
-		cast(c3 as float) as c3,
-		ROW_NUMBER() OVER (ORDER BY (SELECT 100)) row_index 
-	from s1.kc1
-) as source_matrix,
-(
-	select abs(c1) + abs(c2) + abs(c3) as row_norm,
-		ROW_NUMBER() OVER (ORDER BY (SELECT 100)) row_index 
-	from s1.kc1
-) as norms
-where source_matrix.row_index = norms.row_index;
-
-max
-select 
-source_matrix.pk,
-c1 / row_norm as c1, 
-c2 / row_norm as c2, 
-c3 / row_norm as c3 
-from
-(
-	select cast(c1 as float) as c1,
-		cast(c2 as float) as c2,
-		cast(c3 as float) as c3,
-		pk
-	from s1.kc1
-) as source_matrix,
-(
-	select pk, max(mc) as row_norm
-	from 
-	(
-	SELECT pk, c1 as mc
-		FROM s1.kc1
-		UNION ALL
-		SELECT pk, c2 as mc
-		FROM s1.kc1
-		UNION ALL
-		SELECT pk, c3 as mc
-		FROM s1.kc1
-	) as m
-	group by pk
-) as norms
-where source_matrix.pk = norms.pk;
-'''
-
-
-
-
-
-
-
-
-
 # Class: KernelCenterer
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.KernelCenterer.html#sklearn.preprocessing.KernelCenterer
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
-# Center a kernel matrix
-class SqlKernelCenterer (SqlFunction):
 
+class SqlKernelCenterer (SqlFunction):
+    """
+
+    KernelCenterer centers the features without explicitly computing the mapping. Working with centered kernels 
+    is sometime expected when dealing with algebra computation such as eigendecomposition for KernelPCA for instance.
+
+
+
+    Access Documentation
+    --------------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.KernelCenterer.html#sklearn.preprocessing.KernelCenterer
+
+    Access Source Code
+    ------------------
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_data.py
+
+    Center a kernel matrix
+
+    """
 
     def __init__(self, target_column = None):
         self.target_column = target_column
@@ -2698,99 +3567,39 @@ class SqlKernelCenterer (SqlFunction):
         return self
 
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlKernelCenterer is the same to sklearn.preprocessing.KernelCenterer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlKernelCenterer
-
-
-
-'''
-        fit
-
-        1 - get number of columns (or rows??)
-        n_samples = K.shape[0]
-
-        2 - get sum of values on earch row divided by number of samples, each value goes into a separate column
-        self.K_fit_rows_ = np.sum(K, axis=0) / n_samples
-
-        3 - get sum or previous result devided by number of samples 
-        self.K_fit_all_ = self.K_fit_rows_.sum() / n_samples
-        return self
-
-
-        transform
-
-        1 - get sum of values in each column, each devided by number of rows, and organized as single column/array
-
-                K_pred_cols = (np.sum(K, axis=1) /
-                       self.K_fit_rows_.shape[0])[:, np.newaxis]
-
-        2 - from each element of a row minus value from K_fit_rows_ in corresponding column
-        K -= self.K_fit_rows_
-
-        3 - each elemnt minus value from K_pred_cols of its row
-        K -= K_pred_cols
-
-        4 - to each element add K_fit_all_
-        K += self.K_fit_all_
-
-
-
-
-
---fit
-SELECT 
-     SUM(CASE WHEN row_index =  1 THEN k_fit_row END) c1,
-     SUM(CASE WHEN row_index =  2 THEN k_fit_row END) c2,
-	 SUM(CASE WHEN row_index =  3 THEN k_fit_row END) c3
-from 
-(
-select cast((c1 + c2 + c3) as float) / 3 as k_fit_row, ROW_NUMBER() OVER (ORDER BY (SELECT 100)) row_index from s1.kc1
-) as a;
-
-
-select sum(k_fit_row) / 3 as k_fit_all
-from (
-	select cast((c1 + c2 + c3) as float) / 3 as k_fit_row from s1.kc1
-) as a;
-
-
--- transform 
-
-select 
-kc.c1 - k_pred_cols.k_pred_col + 2 as c1,
-kc.c2 - k_pred_cols.k_pred_col + 2as c2,
-kc.c3 - k_pred_cols.k_pred_col + 2 as c3
-from 
-(
-	select kc1.c1 - k_fit_rows.c1 as c1,
-	kc1.c2 - k_fit_rows.c2 as c2,
-	kc1.c3 - k_fit_rows.c3 as c3,
-	ROW_NUMBER() OVER (ORDER BY (SELECT 100)) row_index
-	from s1.kc1,
-	(
-		SELECT 
-			 SUM(CASE WHEN row_index =  1 THEN k_fit_row END) c1,
-			 SUM(CASE WHEN row_index =  2 THEN k_fit_row END) c2,
-			 SUM(CASE WHEN row_index =  3 THEN k_fit_row END) c3
-		from 
-		(
-		select cast((c1 + c2 + c3) as float) / 3 as k_fit_row, ROW_NUMBER() OVER (ORDER BY (SELECT 100)) row_index from s1.kc1
-		) as a
-	) as k_fit_rows
-) as kc
-inner join 
-(
-	select sum(c1) / 3 as k_pred_col, 1 as row_index
-	from s1.kc1
-	union
-	select sum(c2) / 3, 2
-	from s1.kc1
-	union
-	select sum(c3) / 3, 3
-	from s1.kc1
-) as k_pred_cols on kc.row_index = k_pred_cols.row_index
-
-'''
-
 
 
 
@@ -2799,11 +3608,31 @@ inner join
 
 
 # Class: KBinsDiscretizer
-# https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.KBinsDiscretizer.html#sklearn.preprocessing.KBinsDiscretizer
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_discretization.py
-# At this point, functionality is limited to ordinal encoding with quantile strategy
-class SqlKBinsDiscretizer (SqlFunction):
 
+class SqlKBinsDiscretizer (SqlFunction):
+    """
+
+    Discretization (otherwise known as quantization or binning) provides a way to partition continuous features into discrete values. Certain datasets 
+    with continuous features may benefit from discretization, because discretization can transform the dataset of continuous attributes to one with only 
+    nominal attributes.
+
+    One-hot encoded discretized features can make a model more expressive, while maintaining interpretability. For instance, pre-processing with a discretizer 
+    can introduce nonlinearity to linear models. For more advanced possibilities, in particular smooth ones, see Generating polynomial features further below.
+
+    KBinsDiscretizer discretizes features into k bins
+
+    Access Documentation
+    ----------------------
+    https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.KBinsDiscretizer.html#sklearn.preprocessing.KBinsDiscretizer
+
+    Access Source Code
+    ------------------
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/preprocessing/_discretization.py
+
+
+    At this point, functionality is limited to ordinal encoding with quantile strategy
+
+    """
 
     def __init__(self, n_bins = 5, target_column = None):
         self.n_bins = n_bins
@@ -2854,7 +3683,39 @@ class SqlKBinsDiscretizer (SqlFunction):
         return self
 
 
-# end of class SqlLabelBinarizer    
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlKBinsDiscretizer is the same to sklearn.preprocessing.KBinsDiscretizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
+# end of class SqlKBinsDiscretizer  
 
 
 
@@ -2863,10 +3724,20 @@ class SqlKBinsDiscretizer (SqlFunction):
 
 
 # Class: SimpleImputer
-# https://scikit-learn.org/stable/modules/generated/sklearn.impute.SimpleImputer.html
-# Supported strategies mean, most_frequent, constant
-class SqlSimpleImputer (SqlFunction):
 
+class SqlSimpleImputer (SqlFunction):
+    """
+    Supported strategies mean, most_frequent, constant
+
+    Univariate imputer for completing missing values with simple strategies.
+
+    Replace missing values using a descriptive statistic (e.g. mean, median, or most frequent) along each column, or using a constant value.
+
+    Access Documentation
+    --------------------
+
+    https://scikit-learn.org/stable/modules/generated/sklearn.impute.SimpleImputer.html
+    """
 
     def __init__(self, strategy='mean', fill_value=None, cast_as=None, target_column = None):
         self.strategy = strategy
@@ -2927,6 +3798,38 @@ class SqlSimpleImputer (SqlFunction):
         return self
 
 
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlSimpleImputer is the same to sklearn.Imputer.SimpleImputer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        sql_dict = self.__dict__
+        sklearn_dict = sklearn_object.__dict__
+        return self._compare_dict(sql_dict, sklearn_dict)
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlSimpleImputer  
 
 
@@ -2945,11 +3848,17 @@ class SqlSimpleImputer (SqlFunction):
 
 
 # Class: SqlDataFrameMapper
-# Same as DataFrameMapper from sklearn-pandas
-# Maps SQL data source column subsets to transformations.
-# https://github.com/scikit-learn-contrib/sklearn-pandas
-class SqlDataFrameMapper:
 
+class SqlDataFrameMapper:
+    """
+    Same as DataFrameMapper from sklearn-pandas
+    Maps SQL data source column subsets to transformations.
+
+    Access Documentation
+    --------------------
+    https://github.com/scikit-learn-contrib/sklearn-pandas
+
+    """
 
     # self.features [columns, feature]
 
@@ -2991,9 +3900,28 @@ class SqlDataFrameMapper:
 
 
 # Class: SqlColumnTransformer
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/compose/_column_transformer.py
-class SqlColumnTransformer():
 
+class SqlColumnTransformer():
+    """
+    Applies transformers to columns of an array or pandas DataFrame
+
+    This estimator allows different columns or column subsets of the input to be transformed separately and the features generated by each transformer will be concatenated 
+    to form a single feature space. This is useful for heterogeneous or columnar data, to combine several feature extraction mechanisms or transformations into a single transformer.
+
+    Parameters
+        ----------
+        transformers : list of tuples
+            List of (name, transformer, columns) tuples specifying the
+            transformer objects to be applied to subsets of the data.
+
+        sdf: A new instance of :class:`SqlDataFrame`.
+
+    Access Source Code
+    ------------------
+
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/compose/_column_transformer.py
+
+    """
 
     # self.transformers [name, transformer, columns]
 
@@ -3040,11 +3968,30 @@ class SqlColumnTransformer():
 
 
 # Class: SqlPipeline
-# Partial image of SqlPipeline from sklearn
-# https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/pipeline.py
-# --- https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/utils/metaestimators.py
-class SqlPipeline():
 
+class SqlPipeline():
+    """
+    Partial image of SqlPipeline from sklearn 
+
+    This module implements utilities to build a composite estimator, as a chain of transforms and estimators.
+
+    Pipeline of transforms with a final estimator. Sequentially apply a list of transforms and a final estimator.
+    Intermediate steps of the pipeline must be 'transforms', that is, they must implement `fit` and `transform` methods.
+    The final estimator only needs to implement `fit`. The transformers in the pipeline can be cached using ``memory`` argument.
+    The purpose of the pipeline is to assemble several steps that can be cross-validated together while setting different parameters. 
+    For this, it enables setting parameters of the various steps using their names and the parameter name separated by a `'__'`, as in 
+    the example below. A step's estimator may be replaced entirely by setting the parameter with its name to another estimator, or a 
+    transformer removed by setting it to `'passthrough'` or `None`.
+
+
+    Access Source code for refrence
+    ---------------------------------
+
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/pipeline.py
+
+    https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/utils/metaestimators.py
+
+    """
 
     # self.steps [name, transformer]
 
@@ -3068,6 +4015,26 @@ class SqlPipeline():
 
 
     def fit(self, x_sdf, y_df=None, **fit_params):
+        """
+        Fit all the transformers one after the other and transform the
+        data. Finally, fit the transformed data using the final estimator.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Training data. Must fulfill input requirements of first step of the
+            pipeline.
+        y_df : iterable, default=None
+            Training targets. Must fulfill label requirements for all steps of
+            the pipeline.
+        **fit_params : dict of string -> object
+            Parameters passed to the ``fit`` method of each step, where
+            each parameter name is prefixed such that parameter ``p`` for step
+            ``s`` has key ``s__p``.
+        Returns
+        -------
+        self : object
+            Pipeline with fitted steps.
+        """
 
         #fit sql transformers
         for step in self.steps[:len(self.steps) - 1]: 
@@ -3118,11 +4085,56 @@ class SqlPipeline():
 
 
     def fit_transform(self, x_sdf, y_df=None, **fit_params):
+        """
+        Fit the model and transform with the final estimator.
+        Fits all the transformers one after the other and transform the
+        data. Then uses `fit_transform` on transformed data with the final
+        estimator.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Training data. Must fulfill input requirements of first step of the
+            pipeline.
+        y_df : iterable, default=None
+            Training targets. Must fulfill label requirements for all steps of
+            the pipeline.
+        **fit_params : dict of string -> object
+            Parameters passed to the ``fit`` method of each step, where
+            each parameter name is prefixed such that parameter ``p`` for step
+            ``s`` has key ``s__p``.
+        Returns
+        -------
+        Xt : ndarray of shape (n_samples, n_transformed_features)
+            Transformed samples.
+        """
         self.fit(x_sdf, y_df, **fit_params)
         return self.transform(x_sdf)
 
 
     def predict(self, x_sdf, **predict_params):
+        """
+        Transform the data, and apply `predict` with the final estimator.
+        Call `transform` of each transformer in the pipeline. The transformed
+        data are finally passed to the final estimator that calls `predict`
+        method. Only valid if the final estimator implements `predict`.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Data to predict on. Must fulfill input requirements of first step
+            of the pipeline.
+        **predict_params : dict of string -> object
+            Parameters to the ``predict`` called at the end of all
+            transformations in the pipeline. Note that while this may be
+            used to return uncertainties from some models with return_std
+            or return_cov, uncertainties that are generated by the
+            transformations in the pipeline are not propagated to the
+            final estimator.
+            .. versionadded:: 0.20
+        Returns
+        -------
+        y_df : ndarray
+            Result of calling `predict` on the final estimator.
+        """
 
         self.transform(x_sdf, True)
         x_df = self.execute_df(x_sdf, return_df = True)
@@ -3131,12 +4143,50 @@ class SqlPipeline():
 
 
     def fit_predict(self, x_sdf, y_df=None, **fit_params):
+        """
+        Transform the data, and apply `fit_predict` with the final estimator.
+        Call `fit_transform` of each transformer in the pipeline. The
+        transformed data are finally passed to the final estimator that calls
+        `fit_predict` method. Only valid if the final estimator implements
+        `fit_predict`.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Training data. Must fulfill input requirements of first step of
+            the pipeline.
+        y_df : iterable, default=None
+            Training targets. Must fulfill label requirements for all steps
+            of the pipeline.
+        **fit_params : dict of string -> object
+            Parameters passed to the ``fit`` method of each step, where
+            each parameter name is prefixed such that parameter ``p`` for step
+            ``s`` has key ``s__p``.
+        Returns
+        -------
+        y_df : ndarray
+            Result of calling `fit_predict` on the final estimator.
+        """
         self.fit(x_sdf, y_df, **fit_params)
         return self.predict(x_sdf, **fit_params)
 
     
     def score_samples(self, x_sdf):
-
+        """
+        Transform the data, and apply `score_samples` with the final estimator.
+        Call `transform` of each transformer in the pipeline. The transformed
+        data are finally passed to the final estimator that calls
+        `score_samples` method. Only valid if the final estimator implements
+        `score_samples`.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Data to predict on. Must fulfill input requirements of first step
+            of the pipeline.
+        Returns
+        -------
+        y_score : ndarray of shape (n_samples,)
+            Result of calling `score_samples` on the final estimator.
+        """
         self.transform(x_sdf, True)
         x_df = self.execute_df(x_sdf, return_df = True)
 
@@ -3155,6 +4205,130 @@ class SqlPipeline():
         return self.steps[-1][-1].score(x_df, y_df, **score_params)
 
 
+    comparable_type_dict = {
+            "SqlMinMaxScaler": "MinMaxScaler",
+            "SqlMaxAbsScaler": "MaxAbsScaler",
+            "SqlStandardScaler": "StandardScaler",
+            "SqlBinarizer": "Binarizer",
+            "SqlLabelEncoder": "LabelEncoder",
+            "SqlOrdinalEncoder": "OrdinalEncoder",
+            "SqlOneHotEncoder": "OneHotEncoder",
+            "SqlLabelBinarizer": "LabelBinarizer",
+            "SqlNormalizerr": "Normalizer",
+            "SqlKernelCenterer": "KernelCenterer",        
+            "SqlSimpleImputer": "SimpleImputer",
+            "SqlPipeline": "Pipeline"
+    }
+
+    def equal_to_sklean(self, sklearn_object):
+        """ Compare the SqlKBinsDiscretizer is the same to sklearn.preprocessing.KBinsDiscretizer
+            return True if they are the same, else return False
+        """
+
+        sql_type = self.__class__.__name__
+        sklearn_type = sklearn_object.__class__.__name__
+
+        if sql_type[3:] != sklearn_type:
+            return False
+        
+        if not self._same_arguments(sklearn_object):
+            return False
+        
+        return True
+
+    
+    def _same_arguments(self, sklearn_object):
+        """ Compare if the arguments are the same for the two objects
+        """
+
+        return self._compare_pipeline(sklearn_object)
+
+
+    def _compare_pipeline(self, sklearn_object):
+        sqlPipeline_steps = self._get_sqlPipeline_steps()
+        pipeline_steps = self._get_pipeline_steps(sklearn_object)
+
+        if self._is_same_steps(pipeline_steps, sqlPipeline_steps):
+            return True
+        else:
+            return False
+
+    def _is_same_steps(self, pipeline_steps, sqlPipeline_steps):
+
+        for column, steps in pipeline_steps.items():
+            sql_steps = sqlPipeline_steps[column]
+            for i in range(len(steps)):
+                sql_transformer, _ = sql_steps[i]
+                sklearn_transformer, _ = steps[i]
+                if sql_transformer != sklearn_transformer:
+                    return False
+        
+        return True
+
+
+    def _get_pipeline_steps(self, sklearn_object):
+        column_steps = defaultdict(list)
+
+        steps = sklearn_object.named_steps
+        for step in steps:
+            step_type = sklearn_object.named_steps.get(step).__class__.__name__
+            if step_type == 'ColumnTransformer':
+                transformers = steps.get(step).transformers
+                for transformer in transformers:
+                    name, functions, columns = transformer
+                    if isinstance(functions, sklearn.pipeline.Pipeline):
+                        nested_steps = functions.named_steps
+                        for nested_step in nested_steps:
+                            nested_function = nested_steps.get(nested_step)
+                            if len(columns) > 1:
+                                for column in columns:
+                                    column_steps[column].append((nested_function.__class__.__name__, name))
+                            else:
+                                column_steps[columns].append(nested_function.__class__.__name__, name)
+                    else:
+                        if len(columns) > 1:
+                            for column in columns:
+                                column_steps[column].append((functions.__class__.__name__, name))
+                        else:
+                            column_steps[columns[0]].append((functions.__class__.__name__, name))
+            else:
+                # print(f"step is {step}")
+                column_steps['regressor'].append((step_type, step))
+
+        # print(f"sklearn pipeline steps dict : \n {column_steps}")
+        
+        return column_steps
+
+
+    def _get_sqlPipeline_steps(self):
+        column_steps = defaultdict(list)
+        steps = self.steps
+        for step in steps:
+            name, function = step
+            function_name = function.__class__.__name__
+            if isinstance(function, SqlColumnTransformer):
+                transformers = function.transformers
+                for transformer in transformers:
+                    _, sql_function, column = transformer
+                    sql_function_name = sql_function.__class__.__name__
+                    sklearn_function_name = self.comparable_type_dict[sql_function_name]
+                    column_steps[column].append((sklearn_function_name, name))
+            else:
+                # print(f"not SqlColumnTransformer {function_name} {name}")
+                column_steps['regressor'].append((function_name, name))
+
+        # print(f"Sql pipeline steps dict : \n {column_steps}")
+
+        return column_steps
+
+
+    def _compare_dict(self, sql_dict, sklearn_dict):
+        for sql_key in sql_dict.keys():
+            if sql_key in sklearn_dict.keys() and sklearn_dict[sql_key] != sql_dict[sql_key]:
+                return False
+
+        return True
+
 # end of class SqlPipeline
 
 
@@ -3167,9 +4341,20 @@ class SqlPipeline():
 
 
 # Class: SqlNestedPipeline
-# Allows for nested transformations where each ColumnTransnformer is nested into following ColumnTransformer
-class SqlNestedPipeline():
 
+class SqlNestedPipeline():
+    """
+    Allows for nested transformations where each ColumnTransnformer is nested into following ColumnTransformer
+
+    Pipeline of transforms with a final estimator. Sequentially apply a list of transforms and a final estimator.
+    Intermediate steps of the pipeline must be 'transforms', that is, they must implement `fit` and `transform` methods.
+    The final estimator only needs to implement `fit`. The transformers in the pipeline can be cached using ``memory`` argument.
+    The purpose of the pipeline is to assemble several steps that can be cross-validated together while setting different parameters. 
+    For this, it enables setting parameters of the various steps using their names and the parameter name separated by a `'__'`, as in 
+    the example below. A step's estimator may be replaced entirely by setting the parameter with its name to another estimator, or a 
+    transformer removed by setting it to `'passthrough'` or `None`.
+    
+    """
 
     # self.steps [name, transformer]
 
@@ -3193,7 +4378,35 @@ class SqlNestedPipeline():
 
 
     def fit(self, x_sdf, y_df=None, **fit_params):
+        """
+        Stores x_sdf in x_df for fitting the model
 
+        then sklearn steps after
+
+        fit final estimator
+
+
+        
+        Fit all the transformers one after the other and transform the
+        data. Finally, fit the transformed data using the final estimator.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Training data. Must fulfill input requirements of first step of the
+            pipeline.
+        y_df : iterable, default=None
+            Training targets. Must fulfill label requirements for all steps of
+            the pipeline.
+        **fit_params : dict of string -> object
+            Parameters passed to the ``fit`` method of each step, where
+            each parameter name is prefixed such that parameter ``p`` for step
+            ``s`` has key ``s__p``.
+        Returns
+        -------
+        self : object
+            Pipeline with fitted steps.
+        
+        """
         x_sdf = self.nested_sql_fit_transform(x_sdf)
           
         #get x_sdf to x_df to fit model
@@ -3214,10 +4427,11 @@ class SqlNestedPipeline():
 
     def nested_sql_fit_transform(self, x_sdf):
 
+        """fit sql transformers - every step output is input into next step
+        to generate sql, transform must follow fit before moving onto next step"""
+
         copy_x_sdf = None
 
-        #fit sql transformers - every step output is input into next step
-        # to generate sql, transform must follow fit before moving onto next step
         for step in self.steps[:len(self.steps) - 1]: 
             
             if (copy_x_sdf is None):
@@ -3231,10 +4445,9 @@ class SqlNestedPipeline():
 
         return copy_x_sdf
 
-
     # populates sdf but does not execute sklearn transformers
     def transform(self, x_sdf, skip_final_estimator = False):
-
+        """ populates sdf but does not execute sklearn transformers """
         len_to_skip = 1 if (skip_final_estimator) else 0
         copy_x_sdf = None
 
@@ -3250,9 +4463,9 @@ class SqlNestedPipeline():
         return copy_x_sdf
 
 
-    # retrives data from sdf and applies sklearn transformers
+    # retrives data from sdf and applies sklearn transformers 
     def execute_df(self, x_sdf, return_df = True):
-
+        """retrives data from sdf and applies sklearn transformers"""
         x_df = x_sdf.execute_df(return_df = True)
 
         # apply sklearn transformers if defined
@@ -3264,11 +4477,56 @@ class SqlNestedPipeline():
 
 
     def fit_transform(self, x_sdf, y_df=None, **fit_params):
+        """
+        Fit the model and transform with the final estimator.
+        Fits all the transformers one after the other and transform the
+        data. Then uses `fit_transform` on transformed data with the final
+        estimator.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Training data. Must fulfill input requirements of first step of the
+            pipeline.
+        y_df : iterable, default=None
+            Training targets. Must fulfill label requirements for all steps of
+            the pipeline.
+        **fit_params : dict of string -> object
+            Parameters passed to the ``fit`` method of each step, where
+            each parameter name is prefixed such that parameter ``p`` for step
+            ``s`` has key ``s__p``.
+        Returns
+        -------
+        Xt : ndarray of shape (n_samples, n_transformed_features)
+            Transformed samples.
+        """
         self.fit(x_sdf, y_df, **fit_params)
         return self.transform(x_sdf)
 
 
     def predict(self, x_sdf, **predict_params):
+        """
+        Transform the data, and apply `predict` with the final estimator.
+        Call `transform` of each transformer in the pipeline. The transformed
+        data are finally passed to the final estimator that calls `predict`
+        method. Only valid if the final estimator implements `predict`.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Data to predict on. Must fulfill input requirements of first step
+            of the pipeline.
+        **predict_params : dict of string -> object
+            Parameters to the ``predict`` called at the end of all
+            transformations in the pipeline. Note that while this may be
+            used to return uncertainties from some models with return_std
+            or return_cov, uncertainties that are generated by the
+            transformations in the pipeline are not propagated to the
+            final estimator.
+            .. versionadded:: 0.20
+        Returns
+        -------
+        y_df : ndarray
+            Result of calling `predict` on the final estimator.
+        """
 
         x_sdf = self.transform(x_sdf, True)
         x_df = self.execute_df(x_sdf, return_df = True)
@@ -3277,12 +4535,50 @@ class SqlNestedPipeline():
 
 
     def fit_predict(self, x_sdf, y_df=None, **fit_params):
+        """
+        Transform the data, and apply `fit_predict` with the final estimator.
+        Call `fit_transform` of each transformer in the pipeline. The
+        transformed data are finally passed to the final estimator that calls
+        `fit_predict` method. Only valid if the final estimator implements
+        `fit_predict`.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Training data. Must fulfill input requirements of first step of
+            the pipeline.
+        y_df : iterable, default=None
+            Training targets. Must fulfill label requirements for all steps
+            of the pipeline.
+        **fit_params : dict of string -> object
+            Parameters passed to the ``fit`` method of each step, where
+            each parameter name is prefixed such that parameter ``p`` for step
+            ``s`` has key ``s__p``.
+        Returns
+        -------
+        y_df : ndarray
+            Result of calling `fit_predict` on the final estimator.
+        """
         self.fit(x_sdf, y_df, **fit_params)
         return self.predict(x_sdf, **fit_params)
 
     
     def score_samples(self, x_sdf):
-
+        """
+        Transform the data, and apply `score_samples` with the final estimator.
+        Call `transform` of each transformer in the pipeline. The transformed
+        data are finally passed to the final estimator that calls
+        `score_samples` method. Only valid if the final estimator implements
+        `score_samples`.
+        Parameters
+        ----------
+        x_sdf : iterable
+            Data to predict on. Must fulfill input requirements of first step
+            of the pipeline.
+        Returns
+        -------
+        y_score : ndarray of shape (n_samples,)
+            Result of calling `score_samples` on the final estimator.
+        """
         x_sdf = self.transform(x_sdf, True)
         x_df = self.execute_df(x_sdf, return_df = True)
 
@@ -3307,9 +4603,20 @@ class SqlNestedPipeline():
 
 
 # Class: SqlPipelineSerializer
-# File serialilzation is based on joblib (superseeds pickle)
-# https://joblib.readthedocs.io/en/latest/persistence.html
+
 class SqlPipelineSerializer:
+    """
+    File serialilzation is based on joblib (superseeds pickle)
+    
+    Functions are the simplest abstraction used by everyone. Pipeline jobs (or tasks) in Joblib are made of decorated functions.
+
+    Tracking of parameters in a meaningful way requires specification of data model. Joblib gives up on that and uses hashing for performance and robustness.
+
+    Access documentation
+    ---------------------
+    https://joblib.readthedocs.io/en/latest/persistence.html
+
+    """
 
     @classmethod
     def dump_pipeline_to_file(cls, pipeline, filename):
@@ -3336,9 +4643,14 @@ class SqlPipelineSerializer:
 
 
 # Class: SqlPipelineTestModel
-# Dummy model class which allows to build pipelines and test results of transformations
-# This model can be added as a classifier at the end of pipeline to display pipline transformation results
+
 class SqlPipelineTestModel():
+    """
+    
+    Dummy model class which allows to build pipelines and test results of transformations
+    This model can be added as a classifier at the end of pipeline to display pipline transformation results
+
+    """
 
     def __init__(self, print_df = False):
         self.print_df = print_df
@@ -3349,6 +4661,7 @@ class SqlPipelineTestModel():
 
 
     def fit(self, x_df, y_df=None, **fit_params):
+
         if (self.print_df):
             print('SqlPipelineTestModel - fit:')
             print(x_df)
@@ -3367,6 +4680,7 @@ class SqlPipelineTestModel():
 
 
     def score(self, x_sdf, y_df=None, **score_params):
+        """ Prints accuracy score """
         if (self.print_df):
             print('SqlPipelineTestModel - score:')
             print(x_sdf)
